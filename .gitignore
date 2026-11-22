@@ -1,0 +1,23 @@
+# 依赖与构建产物
+node_modules/
+dist/
+build/
+
+# 密钥与本地日志（绝对不要提交）
+.env
+.env.local
+*.env.local
+app/logs/
+logs/
+
+# 本地缓存与工具产物
+.npm-cache/
+.acl-recovery/
+__pycache__/
+*.pyc
+
+# 编辑器与系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
