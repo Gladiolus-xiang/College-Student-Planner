@@ -134,6 +134,24 @@ const messages = [{ role: 'user', content: 'hi' }]
   check('无 IP 时不写设备 key', ipKeys.length === 0, ipKeys.join(','))
 }
 
+// 10. 线上运行时没有 AbortSignal.timeout（EdgeOne 实测报 "is not a function"）也要能调通
+{
+  const saved = AbortSignal.timeout
+  // @ts-ignore 故意抹掉，模拟边缘运行时
+  AbortSignal.timeout = undefined
+  try {
+    const res = await handleChat(post({ messages }), { env: KEY, checkOrigin: true })
+    const data = await res.json()
+    check(
+      '运行时缺 AbortSignal.timeout 也能调通',
+      res.status === 200 && data.content === 'ok',
+      `${res.status} ${data.error ?? data.content ?? ''}`,
+    )
+  } finally {
+    AbortSignal.timeout = saved
+  }
+}
+
 globalThis.fetch = realFetch
 const failed = results.filter((r) => !r.ok)
 console.log(failed.length ? `\n${failed.length} 项失败` : `\n全部通过（${results.length} 项）`)

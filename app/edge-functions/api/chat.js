@@ -187,12 +187,16 @@ export async function handleChat(request, ctx = {}) {
   if (body.json) payload.response_format = { type: 'json_object' }
 
   const started = Date.now()
+  // 边缘运行时不一定实现 AbortSignal.timeout（EdgeOne 线上就报 "AbortSignal.timeout is not a function"），
+  // 用 AbortController + setTimeout 兜底，本地和线上跑同一份代码
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS)
   try {
     const upstream = await fetch(`${base.replace(/\/$/, '')}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+      signal: controller.signal,
     })
     const text = await upstream.text()
     if (!upstream.ok) {
@@ -219,6 +223,8 @@ export async function handleChat(request, ctx = {}) {
       { error: timedOut ? '模型响应超时，请重试（识别截图会比纯文字慢）' : '调用模型失败', detail: message },
       502,
     )
+  } finally {
+    clearTimeout(timer)
   }
 }
 

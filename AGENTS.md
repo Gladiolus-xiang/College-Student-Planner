@@ -33,6 +33,7 @@ npm.cmd run dev      # 必须 npm.cmd，Windows 禁 npm.ps1
 13. 录入是「追加」不是「替换」：解析/截图结果先去重再 append，绝不能 `setItems(新数组)` 把已有活动冲掉。截图入口只有一个（`pickImage()`），视觉提示词只有 `buildScreenshotMessages`，不要再按课表/通知拆两条。
 14. **排期必须尊重截止**：有 deadline 的任务，每一块都要在截止前结束（`schedule.ts` 的 `deadlineCapMin`）。排不进去就不排，交给「没排上」列表说明原因——绝不能排出「20:15 才动工，20:06 截止」这种块。
 15. **别用 PowerShell 的 `Set-Content` / `-replace` 改源码**：会把中文写成乱码（已经毁过一次 `schedule.ts`）。改文件只用编辑工具，或者用 Python 显式 `encoding='utf-8'`。
+16. **边缘运行时能力有限**：线上实测没有 `AbortSignal.timeout`（报 `is not a function`，表现为 502「调用模型失败」）。超时一律 `AbortController` + `setTimeout` + `clearTimeout`；新增任何 Web API 前先想「EdgeOne 的运行时有没有」。
 
 ## 改完跑什么
 
@@ -66,6 +67,7 @@ node scripts/e2e-deadline-reminder.mjs  # 马上截止的事：不排到截止�
 | 习惯按原文钟点开始，不默认 19:00 | `smoke-habit.mjs` |
 | 有截止的任务不排到截止之后 | `smoke-deadline.mjs` |
 | 提醒时刻错过、截止将至时要补发 | `smoke-reminder.mjs` |
+| 代理超时不能用 `AbortSignal.timeout` | `smoke-quota.mjs`（模拟运行时缺这个 API） |
 | 单个文本文件不超 20 KB | `.githooks/pre-commit` |
 
 ## 提交前

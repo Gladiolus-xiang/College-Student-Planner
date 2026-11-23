@@ -148,3 +148,4 @@
 - 2026-11-23 深夜 追加 D22；习惯按 `preferStart` 开始（「晚上8点去跑步」不再排成 19:00–20:00），补 `smoke-habit.mjs` 与 `e2e-habit-time.mjs`。
 - 2026-11-23 深夜 大扫除（无 D 编号，不改产品行为）：`App.tsx` 34 KB 拆成 `components/` 四个视图 + `lib/normalize.ts` 校验层，单日上限常量只留一处；删 `smoke-case.mjs`、`build_doc.py`、`fix_doc_images.py` 和 `clearItems()`；文件大小钩子去掉白名单。
 - 2026-11-23 晚 追加 D23；排期不许跨过截止、错过的提醒立刻补发，补 `smoke-deadline.mjs` 与 `e2e-deadline-reminder.mjs`。
+- 2026-11-23 深夜 首次线上部署验收：页面、同源校验、405 全对；同源调模型 502，原因是 EdgeOne 运行时没有 `AbortSignal.timeout`——改成 `AbortController` + `setTimeout`，`smoke-quota.mjs` 加一条「运行时缺这个 API 也能调通」。

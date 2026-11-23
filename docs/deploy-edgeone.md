@@ -101,6 +101,8 @@ git push -u origin main
 | 413 / 「这张图太大」 | 边缘函数请求体上限 1 MB | 前端已压到 1280px；仍然报就裁剪截图 |
 | 429 | 当日额度用完 | 调大 `DAILY_LIMIT`，或等次日 0 点 |
 | 403「这个地址只给本站页面用」 | 页面和接口不同源 | 用平台给的域名访问，不要直接调接口 |
+| 401 + 一个「Tencent Edgeone」页面 | 打开的是**预览域名**，链接里的 `eo_token` 过期（3 小时） | 回控制台拿最新的预览链接；长期用请绑自定义域名 |
+| 502「调用模型失败 / AbortSignal.timeout is not a function」 | 边缘运行时没有 `AbortSignal.timeout`（2026-11-23 已改成 `AbortController`） | `git push` 后重新部署即可 |
 | 手机上没有系统通知 | iPhone 的 Safari 不支持网页通知 | 页面右下角 Toast 仍然有；演示时说清这一点 |
 
 ## 8. 之后的更新流程
