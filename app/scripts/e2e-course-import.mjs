@@ -59,6 +59,17 @@ try {
   const hint = await page.getByText(/课表 \d+ 门已就位/).isVisible().catch(() => false)
   check('没有任务时给出「课表已就位」的说明', hint)
 
+  // 识别错的课要能手动删掉，并且刷新后不回来（排期不再避开那段时间）
+  const board = page.locator('section', { hasText: '本周课表' })
+  await board.getByRole('button', { name: /^删除 / }).first().click()
+  const afterDelete = await board.locator('li').count()
+  check('课表可以逐条删除', afterDelete === courseRows - 1, `${afterDelete} 行`)
+
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.getByText('本周课表').waitFor({ timeout: 10_000 })
+  const afterReload = await board.locator('li').count()
+  check('删掉的课刷新后不回来', afterReload === courseRows - 1, `${afterReload} 行`)
+
   await page.screenshot({ path: SHOT, fullPage: true })
   check('控制台没有报错', consoleErrors.length === 0, consoleErrors.slice(0, 3).join(' | '))
 } catch (err) {

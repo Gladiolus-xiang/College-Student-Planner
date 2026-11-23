@@ -201,6 +201,15 @@ function App() {
     })
   }
 
+  /** 删掉一条识别错的课：不改别的课，只是不再避它 */
+  const removeCourse = (id: string) => {
+    setCourses((prev) => {
+      const next = prev.filter((c) => c.id !== id)
+      saveCourses(next)
+      return next
+    })
+  }
+
   /** 今天没做完 → 只让模型排先后顺序，时间由引擎从明天起重算 */
   const handleReplan = async () => {
     if (!blocks.length || replanState === 'loading') return
@@ -392,7 +401,7 @@ function App() {
           <ParseList items={items} onRemove={removeItem} onClear={clearAll} rawJson={rawJson} />
         </div>
 
-        <CourseBoard courses={courses} imported={coursesImported} />
+        <CourseBoard courses={courses} imported={coursesImported} onRemove={removeCourse} />
 
         <PlanBoard
           dayPlans={dayPlans}

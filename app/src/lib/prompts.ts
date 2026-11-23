@@ -141,6 +141,7 @@ A. 课表 → {"kind":"course","courses":[{"name":"高等数学","weekday":1,"st
      第5节 13:30-14:15，第6节 14:25-15:10，第7节 15:30-16:15，第8节 16:25-17:10，
      第9节 18:30-19:15，第10节 19:25-20:10，第11节 20:20-21:05。
   3. 一个格子里有多门课就拆成多条；看不清的不要编造。
+  4. 星期由**格子里的文字落在哪一列**决定：色块再宽、跨到相邻列，也只算文字所在的那一列，不要把同一门课复制到前后两天。课程名、老师、教室都在同一个格子里，属于同一门课。
 
 B. 群聊/通知 → {"kind":"notice","activities":[{"title":"...","type":"ddl","deadline":"2026-11-26 20:00","durationMin":60,"priority":2,"remindBeforeMin":120,"fixed":false,"note":""}]}
   字段：title 不超过 20 字；type 只能是 "ddl" | "habit" | "course" | "goal"；deadline 为 "YYYY-MM-DD HH:mm" 或 null；durationMin 原文没说给 60；priority 1 最紧急 / 2 一般 / 3 不急；remindBeforeMin 默认 120；fixed 为 true 表示到点必须到场；preferStart 习惯类专用，每天几点的钟点填 "HH:mm"；note 写没把握的地方。
