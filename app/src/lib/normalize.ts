@@ -3,7 +3,7 @@
  * 缺字段补默认值、时间格式归一、habit 的钟点单独收 —— 「把模型 JSON 直接落库」是不允许的。
  */
 import type { Activity, ActivityType, CourseSlot } from '../types'
-import { normalizeDeadline } from './time'
+import { normalizeDeadline } from './time.ts'
 
 export interface RawActivity {
   title?: string
