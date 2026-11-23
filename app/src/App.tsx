@@ -152,13 +152,18 @@ function App() {
   useEffect(() => {
     const tick = () => {
       const now = new Date()
-      for (const activity of findDue(items, now, firedRef.current)) {
+      const due = findDue(items, now, firedRef.current)
+      if (!due.length) return
+
+      for (const activity of due) {
         firedRef.current.add(reminderKey(activity))
         const title = reminderTitle(activity, now)
         const body = activity.deadline ? `截止 ${activity.deadline}` : ''
-        systemNotify(title, body)
         addToast(title, body)
+        systemNotify(title, body)
       }
+      // 第一次真的要提醒时才申请系统通知权限：不给也能用，页面内卡片照样弹
+      void ensureNotificationPermission()
     }
     tick()
     const timer = window.setInterval(tick, 15_000)
@@ -185,19 +190,6 @@ function App() {
     setSummary('')
     setRawJson('')
     setError('')
-  }
-
-  const handleDemoReminder = async () => {
-    const permission = await ensureNotificationPermission()
-    addToast(
-      '已安排：60 秒后提醒',
-      permission === 'granted' ? '浏览器通知和页面右下角都会有' : '浏览器通知未授权，只会出现在页面右下角',
-    )
-    window.setTimeout(() => {
-      const title = `该准备下一件事了：${items[0]?.title ?? '下一项任务'}`
-      systemNotify(title, '这是演示提醒，正式使用时会按每个任务的提前量自动触发')
-      addToast(title, '这是演示提醒')
-    }, 60_000)
   }
 
   const toggleBlockDone = (key: string) => {
@@ -410,7 +402,6 @@ function App() {
           replanSummary={replanSummary}
           replanLoading={replanState === 'loading'}
           onReplan={handleReplan}
-          onDemoReminder={handleDemoReminder}
           doneBlocks={doneBlocks}
           onToggleBlock={toggleBlockDone}
           aiReasons={aiReasons}

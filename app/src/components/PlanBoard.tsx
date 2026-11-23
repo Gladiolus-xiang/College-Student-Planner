@@ -15,7 +15,6 @@ interface PlanBoardProps {
   replanSummary: string
   replanLoading: boolean
   onReplan: () => void
-  onDemoReminder: () => void
   doneBlocks: Set<string>
   onToggleBlock: (key: string) => void
   aiReasons: Record<string, string>
@@ -45,7 +44,6 @@ export function PlanBoard({
   replanSummary,
   replanLoading,
   onReplan,
-  onDemoReminder,
   doneBlocks,
   onToggleBlock,
   aiReasons,
@@ -89,13 +87,6 @@ export function PlanBoard({
                 ? '理由生成失败，先用规则文案'
                 : `先保截止，再塞空档 · 单日上限 ${MAX_DAILY_MIN / 60} 小时 · 已避开课程与饭点`}
           </span>
-          <button
-            type="button"
-            onClick={onDemoReminder}
-            className="rounded-lg border border-slate-200 px-2.5 py-1 text-[11px] text-slate-600 transition hover:border-slate-400 hover:text-slate-900"
-          >
-            🔔 60 秒后演示提醒
-          </button>
           <button
             type="button"
             onClick={onReplan}

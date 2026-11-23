@@ -75,6 +75,9 @@ try {
   await reason.waitFor({ timeout: 5_000 })
   check('没排上时说明原因', await reason.isVisible(), await reason.first().innerText())
 
+  // 4. 页面里不该再有「演示提醒」这种为录屏而生的按钮
+  check('没有演示提醒按钮', (await page.getByRole('button', { name: /演示提醒/ }).count()) === 0)
+
   await page.screenshot({ path: SHOT, fullPage: true })
   check('控制台没有报错', consoleErrors.length === 0, consoleErrors.slice(0, 3).join(' | '))
 } catch (err) {

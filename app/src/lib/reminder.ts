@@ -52,6 +52,7 @@ export function reminderTitle(activity: Activity, now: Date): string {
   return minutes ? `还有 ${hours} 小时 ${minutes} 分钟：${activity.title}` : `还有 ${hours} 小时：${activity.title}`
 }
 
+/** 第一次真的该提醒时才申请权限：不给权限也能用，只是改成页面内卡片 */
 export async function ensureNotificationPermission(): Promise<NotificationPermission | 'unsupported'> {
   if (typeof Notification === 'undefined') return 'unsupported'
   if (Notification.permission === 'default') return Notification.requestPermission()
