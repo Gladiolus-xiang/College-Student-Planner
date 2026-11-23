@@ -15,6 +15,8 @@ const BREAKS: Array<[number, number]> = [
   [12 * 60, 13 * 60 + 30], // 午饭
   [17 * 60 + 30, 19 * 60], // 晚饭
 ]
+/** 习惯没给钟点时默认的开始时刻 */
+const EVENING_START = 19 * 60
 
 export const toMin = (hhmm: string): number => {
   const [h, m] = hhmm.split(':').map(Number)
@@ -221,29 +223,49 @@ export function planTasks(
       }
     }
 
-    // 习惯类：每天都要做一次，优先放晚上 19:00 之后，不占 4 小时预算
+    // 习惯类：每天做一次。原文说了钟点（晚上8点）就按那个钟点开始，没给就放 19:00 之后；
+    // 钟点被占时顺延到当天更晚的空档，并在理由里说清顺延到了几点，不偷偷挪到早上
     if (habits.length) {
       const used = blocks
         .filter((b) => b.date === key)
         .map((b) => [toMin(b.start), toMin(b.end)] as [number, number])
-      const rest = freeSlots(date, courses, [...busy, ...used]).filter(
-        ([, end]) => end > notBefore + MIN_BLOCK,
-      )
-      const evening = rest.find(([start]) => start >= 19 * 60) ?? rest[rest.length - 1]
-      if (evening) {
-        let cursor = Math.max(evening[0], notBefore)
-        for (const habit of habits) {
-          const dur = Math.min(60, Math.max(MIN_BLOCK, habit.durationMin))
-          if (cursor + dur > evening[1]) break
-          blocks.push({
-            date: key,
-            activityId: habit.id,
-            start: toHHMM(cursor),
-            end: toHHMM(cursor + dur),
-            reason: '每日固定，保持连续性',
-          })
-          cursor += dur
+      const rest = freeSlots(date, courses, [...busy, ...used])
+        .map(([s, e]) => [Math.max(s, notBefore), e] as [number, number])
+        .filter(([s, e]) => e - s >= MIN_BLOCK)
+        .sort((a, b) => a[0] - b[0])
+
+      /** 占掉一段后把空档切开，后面的习惯不能和前面的重叠 */
+      const take = (start: number, end: number) => {
+        for (let i = rest.length - 1; i >= 0; i -= 1) {
+          const [s, e] = rest[i]
+          if (end <= s || start >= e) continue
+          rest.splice(i, 1)
+          if (s < start) rest.push([s, start])
+          if (end < e) rest.push([end, e])
         }
+        rest.sort((a, b) => a[0] - b[0])
+      }
+
+      for (const habit of habits) {
+        const want = habit.preferStart ? toMin(habit.preferStart) : EVENING_START
+        const dur = Math.min(60, Math.max(MIN_BLOCK, habit.durationMin))
+
+        const fit = rest.find(([s, e]) => Math.max(s, want) + dur <= e)
+        const partial = fit ? null : rest.find(([s, e]) => e - Math.max(s, want) >= MIN_BLOCK)
+        const slot = fit ?? partial
+        if (!slot) continue
+
+        const start = Math.max(slot[0], want)
+        const end = fit ? start + dur : slot[1]
+        blocks.push({
+          date: key,
+          activityId: habit.id,
+          start: toHHMM(start),
+          end: toHHMM(end),
+          reason:
+            start === want ? '每日固定，保持连续性' : `${toHHMM(want)} 这个点被占了，顺延到 ${toHHMM(start)}`,
+        })
+        take(start, end)
       }
     }
   }

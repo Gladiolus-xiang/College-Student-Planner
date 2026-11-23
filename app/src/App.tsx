@@ -26,6 +26,7 @@ interface RawActivity {
   priority?: number
   remindBeforeMin?: number
   fixed?: boolean
+  preferStart?: string
   note?: string
 }
 
@@ -47,6 +48,14 @@ const TYPES: ActivityType[] = ['ddl', 'habit', 'course', 'goal']
 
 const pad = (n: number) => String(n).padStart(2, '0')
 
+const HHMM = /^([01]?\d|2[0-3]):([0-5]\d)$/
+
+/** 模型给的 "20:00" 才收，其它一律当没给 */
+function normalizeClock(input: unknown): string | undefined {
+  const text = String(input ?? '').trim()
+  return HHMM.test(text) ? text.padStart(5, '0') : undefined
+}
+
 function nowParts() {
   const d = new Date()
   const week = '日一二三四五六'[d.getDay()]
@@ -60,15 +69,20 @@ function normalize(raw: RawActivity[]): Activity[] {
     .map((item) => {
       const type = TYPES.includes(item.type as ActivityType) ? (item.type as ActivityType) : 'ddl'
       const priority = Math.min(3, Math.max(1, Math.round(Number(item.priority) || 2))) as 1 | 2 | 3
+      const deadline = normalizeDeadline(item.deadline)
+      // 习惯没有截止时间：模型偶尔还是会给 deadline，就把它当成「每天几点」，
+      // 别在列表里写成「截止 20:00」——那会让人以为 8 点必须跑完
+      const habitClock = type === 'habit' ? normalizeClock(item.preferStart) ?? normalizeClock(deadline?.slice(11)) : undefined
       return {
         id: crypto.randomUUID(),
         title: String(item.title).trim(),
         type,
-        deadline: normalizeDeadline(item.deadline),
+        deadline: type === 'habit' ? null : deadline,
         durationMin: Math.max(5, Math.round(Number(item.durationMin) || 60)),
         priority,
         remindBeforeMin: Math.max(0, Math.round(Number(item.remindBeforeMin) || 120)),
         fixed: item.fixed === true,
+        preferStart: habitClock,
         note: item.note || '',
         source: 'ai' as const,
         status: 'todo' as const,
@@ -77,8 +91,6 @@ function normalize(raw: RawActivity[]): Activity[] {
 }
 
 function normalizeCourses(raw: RawCourse[]): CourseSlot[] {
-  const HHMM = /^([01]?\d|2[0-3]):([0-5]\d)$/
-
   return raw
     .filter((item) => typeof item.name === 'string' && item.name.trim() && typeof item.start === 'string' && typeof item.end === 'string')
     .map((item) => {
@@ -567,7 +579,9 @@ function App() {
                             ? item.fixed
                               ? `${item.deadline.slice(11)} 开始 · 固定日程`
                               : `截止 ${item.deadline} · ${humanizeRemaining(item.deadline)}`
-                            : '无明确截止'}
+                            : item.preferStart
+                              ? `每天 ${item.preferStart} 开始`
+                              : '无明确截止'}
                         </span>
                         <span>预计 {item.durationMin} 分钟</span>
                         <span>优先级 {item.priority}</span>

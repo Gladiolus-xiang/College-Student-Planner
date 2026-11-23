@@ -28,7 +28,8 @@ npm.cmd run dev      # 必须 npm.cmd，Windows 禁 npm.ps1
 9. 每日额度靠 KV，绑定变量名必须是 `QUOTA`；没绑定时代码自动跳过限流、不报错——所以「额度没生效」先查绑定，不是查代码。
 10. 去重口径只有一处：`src/lib/dedupe.ts`（标题归一 + 截止时间）。别在 `App.tsx` 里另写一遍相等比较——两处口径迟早对不上。
 11. 固定日程的 `deadline` 存的是**开始时刻**（`fixedInterval` 拿它当到场时间）。提示词里凡是「几点 + 有某事」都要判成 fixed，界面文案说「开始」不写「截止」。
-12. 录入是「追加」不是「替换」：解析/截图结果先去重再 append，绝不能 `setItems(新数组)` 把已有活动冲掉。截图入口只有一个（`pickImage()`），视觉提示词只有 `buildScreenshotMessages`，不要再按课表/通知拆两条。
+12. **习惯（habit）没有截止时间**：`deadline` 恒为 null，原文说的钟点存 `preferStart`（"20:00"）。排期按 `preferStart` 开始，没说才默认 19:00；钟点被占就顺延并在理由里写明，别默认 19:00 开始、20:00 结束——那看着像「8 点截止」。
+13. 录入是「追加」不是「替换」：解析/截图结果先去重再 append，绝不能 `setItems(新数组)` 把已有活动冲掉。截图入口只有一个（`pickImage()`），视觉提示词只有 `buildScreenshotMessages`，不要再按课表/通知拆两条。
 
 ## 改完跑什么
 
@@ -42,20 +43,22 @@ node scripts/smoke-reminder.mjs  # 打卡连续天数、提醒窗口
 npm.cmd run build                # 类型检查 + 构建
 ```
 
-`smoke-parse` / `smoke-reasons` / `smoke-reorder` / `smoke-vision` / `smoke-start-time` 需要 dev server 在跑（它们会真实调用模型）。
+`smoke-parse` / `smoke-reasons` / `smoke-reorder` / `smoke-vision` / `smoke-start-time` / `smoke-habit` 需要 dev server 在跑（它们会真实调用模型）。
 
 界面改动另跑真浏览器回归（Playwright + 本机 Edge，需要完全访问权限，否则浏览器管道报 EPERM）：
 
 ```powershell
 node scripts/e2e-course-import.mjs   # 贴课表截图 → 本周课表出现、无任务时给引导、控制台无报错，截图存 deliverables/assets/test/
+node scripts/e2e-habit-time.mjs      # 习惯按 20:00 开始、列表写「每天 20:00 开始」而不是「截止」，截图同上
 ```
 
 ## 规则与拦法
 
 | 规则 | 由什么拦住 |
 |---|---|
-| 交差前跑通测试；界面改动附截图 | `e2e-course-import.mjs`（真浏览器 + 控制台报错检查） |
+| 交差前跑通测试；界面改动附截图 | `e2e-course-import.mjs` / `e2e-habit-time.mjs`（真浏览器 + 控制台报错检查） |
 | 录入只追加、不覆盖已有活动 | 解析/截图都只经 `dedupeActivities`，没有别的写入路径 |
+| 习惯按原文钟点开始，不默认 19:00 | `smoke-habit.mjs` |
 | 单个文本文件不超 20 KB | `.githooks/pre-commit` |
 
 ## 提交前
@@ -67,7 +70,7 @@ node scripts/e2e-course-import.mjs   # 贴课表截图 → 本周课表出现、
 
 ## 路标
 
-- 为什么这么设计：`docs/decisions-schedule-app.md`（D1–D21）
+- 为什么这么设计：`docs/decisions-schedule-app.md`（D1–D22）
 - 怎么发布给别人用：`docs/deploy-edgeone.md`
 - 提交材料：`deliverables/`（项目文档、PPT 大纲、演示视频脚本、配图）
 - 回归脚本：`app/scripts/`

@@ -16,6 +16,8 @@ export interface Activity {
   status: 'todo' | 'done'
   /** 习惯类任务的打卡日期，YYYY-MM-DD */
   checkins?: string[]
+  /** 习惯每天几点开始（"HH:mm"）。原文说了钟点才有，没说不填，默认放晚上 */
+  preferStart?: string
 }
 
 export interface CourseSlot {

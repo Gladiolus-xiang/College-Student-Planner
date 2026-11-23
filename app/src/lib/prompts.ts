@@ -19,6 +19,7 @@ export function buildParseMessages(text: string, today: string) {
 - priority：1 最紧急 | 2 一般 | 3 不急
 - remindBeforeMin：提前多少分钟提醒，默认 120
 - fixed：true 表示「固定时间发生的事」，到点就要在场，不需要提前做准备工作（考试、上课、面试、开会）。false 表示需要自己安排时间去做（写报告、复习、背单词）
+- preferStart：习惯类专用，原文给了每天几点（晚上8点、每天7点）就填 "HH:mm"（24 小时制），没给就不填
 - note：一句话说明你没把握的地方，没有就空字符串
 
 规则：
@@ -31,7 +32,7 @@ export function buildParseMessages(text: string, today: string) {
 7. ${DATE_ONLY_RULE}不知道几点开始，就不能当成"到点要在场"的事。
 8. 社团培训、讲座、班会、面试这类一次性、必须到场、且原文给了具体时刻的：type 用 ddl，fixed 为 true，durationMin 填活动本身时长。
 9. 「几点 + 有某事」（今天15:53有线代复习、明天九点开会、周三下午两点答疑）里的时刻是**开始时间，不是截止时间**：fixed 为 true，deadline 写这个开始时刻，durationMin 按这类活动常见的 60–90 分钟估，并在 note 里说明这是开始时间。
-10. 每天重复的事（背单词、跑步）用 habit，deadline 为 null。
+10. 每天重复的事（背单词、跑步）用 habit，deadline 为 null——习惯没有截止时间。原文说了每天几点，就把这个钟点填进 preferStart（"晚上8点" → "20:00"）；这个钟点是每天的开始时间，不是结束时间。
 
 输出格式：{"activities":[{"title":"...","type":"ddl","deadline":"2026-11-26 20:00","durationMin":180,"priority":1,"remindBeforeMin":120,"fixed":false,"note":""}]}`
 
@@ -142,13 +143,14 @@ A. 课表 → {"kind":"course","courses":[{"name":"高等数学","weekday":1,"st
   3. 一个格子里有多门课就拆成多条；看不清的不要编造。
 
 B. 群聊/通知 → {"kind":"notice","activities":[{"title":"...","type":"ddl","deadline":"2026-11-26 20:00","durationMin":60,"priority":2,"remindBeforeMin":120,"fixed":false,"note":""}]}
-  字段：title 不超过 20 字；type 只能是 "ddl" | "habit" | "course" | "goal"；deadline 为 "YYYY-MM-DD HH:mm" 或 null；durationMin 原文没说给 60；priority 1 最紧急 / 2 一般 / 3 不急；remindBeforeMin 默认 120；fixed 为 true 表示到点必须到场；note 写没把握的地方。
+  字段：title 不超过 20 字；type 只能是 "ddl" | "habit" | "course" | "goal"；deadline 为 "YYYY-MM-DD HH:mm" 或 null；durationMin 原文没说给 60；priority 1 最紧急 / 2 一般 / 3 不急；remindBeforeMin 默认 120；fixed 为 true 表示到点必须到场；preferStart 习惯类专用，每天几点的钟点填 "HH:mm"；note 写没把握的地方。
   1. 今天的日期是 ${today}，据此把"今晚""明天下午三点""下周三"换算成具体日期。
   2. 忽略闲聊、表情、"收到""好的""+1" 这类回复，以及接龙报名里的人名。
   3. 抓住通知本身的**事项**和**时间**，不要抓发送者说了什么客套话。
   4. ${DATE_ONLY_RULE}
   5. 班会、开会、讲座、面试这类一次性到场活动用 ddl（fixed 为 true），course 只留给「每周固定重复上的课」。
   6. 写「七点半开会」「下午有实验」这类「时刻 + 有某事」的，时刻是**开始时间**不是截止时间：fixed 为 true，deadline 写这个时刻。
+  7. 每天重复的习惯（每天八点跑步、每晚背单词）用 habit，deadline 为 null；原文给了钟点就填 preferStart（"晚上八点" → "20:00"），钟点是每天的开始时间。
 
 两种都不像、或图里没有与时间有关的内容：输出 {"kind":"other"}。
 

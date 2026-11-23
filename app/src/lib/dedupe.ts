@@ -15,8 +15,8 @@ function normalizeTitle(title: string): string {
     .replace(/[《》()（）「」【】[\]]/g, '')
 }
 
-export function activityKey(activity: Pick<Activity, 'title' | 'deadline'>): string {
-  return `${normalizeTitle(activity.title)}|${activity.deadline ?? ''}`
+export function activityKey(activity: Pick<Activity, 'title' | 'deadline' | 'preferStart'>): string {
+  return `${normalizeTitle(activity.title)}|${activity.deadline ?? ''}|${activity.preferStart ?? ''}`
 }
 
 export function courseKey(course: Pick<CourseSlot, 'name' | 'weekday' | 'start' | 'end'>): string {
