@@ -19,11 +19,15 @@ npm.cmd run dev      # 必须 npm.cmd，Windows 禁 npm.ps1
 4. **替换文档内配图要按「出现顺序」定位**，不能按图片部件 id，否则闭环图和架构图会对调。
 5. 截图识别用 `deepseek-flash`，纯文字用 `deepseek-chat`，同一个 key，别混用。
 6. 新增规则前先搜：时间解析统一走 `src/lib/time.ts` 的 `parseDeadline`；「只有日期 → 23:59 → fixed=false」只在 `prompts.ts` 的 `DATE_ONLY_RULE` 写一次。
+7. **`/api/chat` 只有一份实现**：`app/edge-functions/api/chat.js`。`app/server/deepseek.ts` 只是把 Node 的 req/res 翻译成 Request/Response 的本地壳，不要在里面另写一份逻辑。线上跑边缘函数，本地跑同一个 `handleChat`。
+8. **线上请求体上限 1 MB**（边缘函数的硬限制）。截图在前端压到 1280px / JPEG 0.82，超了自动降档；不要把 `MAX_BODY_CHARS` 调大，那只会把 413 从函数里挪到平台层。
+9. 每日额度靠 KV，绑定变量名必须是 `QUOTA`；没绑定时代码自动跳过限流、不报错——所以「额度没生效」先查绑定，不是查代码。
 
 ## 改完跑什么
 
 ```powershell
 cd app
+node scripts/smoke-quota.mjs     # 代理边界：同源、额度、缺 key（离线，不联网）
 node scripts/smoke-plan.mjs      # 排期不冲突
 node scripts/smoke-edge.mjs      # 时间倒挂、漏排、过期时段
 node scripts/smoke-reminder.mjs  # 打卡连续天数、提醒窗口
@@ -41,6 +45,7 @@ npm.cmd run build                # 类型检查 + 构建
 
 ## 路标
 
-- 为什么这么设计：`docs/decisions-schedule-app.md`（D1–D16）
+- 为什么这么设计：`docs/decisions-schedule-app.md`（D1–D17）
+- 怎么发布给别人用：`docs/deploy-edgeone.md`
 - 提交材料：`deliverables/`（项目文档、PPT 大纲、演示视频脚本、配图）
 - 回归脚本：`app/scripts/`

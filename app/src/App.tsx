@@ -385,7 +385,7 @@ function App() {
   const pickImage = (mode: 'notice' | 'course') => {
     const input = document.createElement('input')
     input.type = 'file'
-    input.accept = 'image/png,image/jpeg,image/webp,image/gif'
+    input.accept = 'image/*'
     input.onchange = () => {
       const file = input.files?.[0]
       if (file) void handleImage(file, mode)
@@ -421,21 +421,21 @@ function App() {
 
   return (
     <div className="min-h-full bg-slate-50">
-      <div className="mx-auto max-w-6xl px-5 py-8 sm:px-8">
-        <header className="mb-8 flex flex-wrap items-end justify-between gap-3">
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-8 sm:py-8">
+        <header className="mb-6 flex flex-wrap items-end justify-between gap-3 sm:mb-8">
           <div>
             <p className="mb-1 text-xs font-medium tracking-widest text-slate-400">HDU · AIGC 应用创新大赛 · 赛题一</p>
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">今天做什么</h1>
+            <h1 className="text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">今天做什么</h1>
             <p className="mt-1 text-sm text-slate-500">把乱糟糟的通知粘进来，AI 帮你拆成能执行的活动。</p>
           </div>
-          <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-500">
-            <span className={`h-1.5 w-1.5 rounded-full ${meta ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-            {meta || '等待第一次解析'}
+          <div className="flex max-w-full items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-500">
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${meta ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+            <span className="truncate">{meta || '等待第一次解析'}</span>
           </div>
         </header>
 
-        <div className="grid gap-6 lg:grid-cols-[1.05fr_1fr]">
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="grid gap-4 sm:gap-6 lg:grid-cols-[1.05fr_1fr]">
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
             <div className="mb-3 flex items-center justify-between">
               <label htmlFor="raw" className="text-sm font-medium text-slate-700">
                 原始文字
@@ -466,8 +466,8 @@ function App() {
               }}
               onDragOver={(e) => e.preventDefault()}
               spellCheck={false}
-              className="h-60 w-full resize-none rounded-xl border border-slate-200 bg-slate-50/60 p-4 text-sm leading-7 text-slate-800 outline-none transition focus:border-slate-400 focus:bg-white"
-              placeholder="粘贴群通知、作业要求、考试安排……也可以直接 Ctrl+V 贴截图"
+              className="h-44 w-full resize-none rounded-xl border border-slate-200 bg-slate-50/60 p-4 text-base leading-7 text-slate-800 outline-none transition focus:border-slate-400 focus:bg-white sm:h-60 sm:text-sm"
+              placeholder="粘贴群通知、作业要求、考试安排……电脑上可以直接 Ctrl+V 贴截图"
             />
             <div className="mt-3 flex items-center justify-between gap-3">
               <span className="text-xs text-slate-400">{text.length} 字</span>
@@ -475,7 +475,7 @@ function App() {
                 type="button"
                 onClick={handleParse}
                 disabled={loading || !text.trim()}
-                className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:py-2.5"
               >
                 {loading ? '解析中…' : 'AI 解析 →'}
               </button>
@@ -487,7 +487,7 @@ function App() {
                 type="button"
                 onClick={() => pickImage('notice')}
                 disabled={imageBusy !== null}
-                className="rounded-lg border border-slate-200 px-2.5 py-1 text-[11px] text-slate-600 transition hover:border-slate-400 hover:text-slate-900 disabled:opacity-50"
+                className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600 transition hover:border-slate-400 hover:text-slate-900 disabled:opacity-50 sm:px-2.5 sm:py-1 sm:text-[11px]"
               >
                 {imageBusy === 'notice' ? '识别通知中…' : '📷 群通知截图'}
               </button>
@@ -495,7 +495,7 @@ function App() {
                 type="button"
                 onClick={() => pickImage('course')}
                 disabled={imageBusy !== null}
-                className="rounded-lg border border-slate-200 px-2.5 py-1 text-[11px] text-slate-600 transition hover:border-slate-400 hover:text-slate-900 disabled:opacity-50"
+                className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600 transition hover:border-slate-400 hover:text-slate-900 disabled:opacity-50 sm:px-2.5 sm:py-1 sm:text-[11px]"
               >
                 {imageBusy === 'course' ? '识别课表中…' : '🗓 课表截图'}
               </button>
@@ -504,7 +504,7 @@ function App() {
             {error && <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{error}</p>}
           </section>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-medium text-slate-700">解析结果</h2>
               <span className="text-xs text-slate-400">{items.length ? `${items.length} 项` : '—'}</span>
@@ -512,7 +512,7 @@ function App() {
 
             {items.length === 0 ? (
               <div className="flex h-60 items-center justify-center rounded-xl border border-dashed border-slate-200 text-sm text-slate-400">
-                还没有结果，点左边「AI 解析」
+                还没有结果，点上面的「AI 解析」
               </div>
             ) : (
               <ul className="space-y-2.5">
@@ -553,10 +553,10 @@ function App() {
         </div>
 
         {dayPlans.length > 0 && (
-          <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:mt-6 sm:p-5">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-medium text-slate-700">未来 {windowDays} 天 · 自动排期</h2>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                 <span className="text-[11px] text-slate-400">
                   {explainState === 'loading'
                     ? 'AI 正在写理由…'
@@ -593,7 +593,7 @@ function App() {
                 {replanSummary}
               </p>
             )}
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
               {dayPlans.map((day) => (
                 <div key={day.date} className="rounded-xl bg-slate-50/80 p-3">
                   <p className="mb-2 flex items-baseline gap-2 text-xs font-medium text-slate-600">
@@ -667,7 +667,7 @@ function App() {
         <footer className="mt-8 text-xs text-slate-400">原型 v0.3</footer>
       </div>
 
-      <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-72 flex-col gap-2">
+      <div className="pointer-events-none fixed inset-x-3 bottom-4 z-50 flex flex-col gap-2 sm:inset-x-auto sm:right-4 sm:w-72">
         {toasts.map((toast) => (
           <div
             key={toast.id}
