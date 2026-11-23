@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { chat, extractJson } from './lib/api'
 import { buildParseMessages } from './lib/prompts'
 import { explainPlan, reorderPlan } from './lib/plan'
-import { blockKey, groupByDay, dayKey, planTasks, toMin, tomorrow } from './lib/schedule'
+import { blockKey, groupByDay, dayKey, planTasks, planWindowDays, toMin, tomorrow } from './lib/schedule'
 import { humanizeRemaining, normalizeDeadline } from './lib/time'
 import { isCheckedToday, streakDays, toggleCheckin } from './lib/checkin'
 import { ensureNotificationPermission, findDue, reminderKey, systemNotify } from './lib/reminder'
@@ -67,7 +67,7 @@ function normalize(raw: RawActivity[]): Activity[] {
 }
 
 function App() {
-  const [text, setText] = useState(SAMPLE)
+  const [text, setText] = useState('')
   const [items, setItems] = useState<Activity[]>(() => loadItems())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -86,16 +86,20 @@ function App() {
   const [replanState, setReplanState] = useState<'idle' | 'loading'>('idle')
   const [replanSummary, setReplanSummary] = useState('')
 
+  /** 计划窗口：至少 3 天，覆盖最远的截止，最多 7 天 */
+  const windowDays = useMemo(() => planWindowDays(items), [items])
+
   const blocks = useMemo(
     () =>
       items.length
         ? planTasks(items, SAMPLE_COURSES, {
+            days: windowDays,
             from: planStart ?? undefined,
             order: replanOrder ?? undefined,
             remainingMin: replanRemaining ?? undefined,
           })
         : [],
-    [items, planStart, replanOrder, replanRemaining],
+    [items, planStart, replanOrder, replanRemaining, windowDays],
   )
   const dayPlans = useMemo(() => groupByDay(blocks, items), [blocks, items])
 
@@ -402,7 +406,7 @@ function App() {
         {dayPlans.length > 0 && (
           <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-sm font-medium text-slate-700">未来 3 天 · 自动排期</h2>
+              <h2 className="text-sm font-medium text-slate-700">未来 {windowDays} 天 · 自动排期</h2>
               <div className="flex items-center gap-3">
                 <span className="text-[11px] text-slate-400">
                   {explainState === 'loading'
@@ -503,9 +507,7 @@ function App() {
           </section>
         )}
 
-        <footer className="mt-8 text-xs text-slate-400">
-          原型 v0.3 · 录入解析 / 规则排期 / AI 理由 / 打卡 / 到点提醒已通（一键重排在 Day 4 接入）
-        </footer>
+        <footer className="mt-8 text-xs text-slate-400">原型 v0.3</footer>
       </div>
 
       <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-72 flex-col gap-2">

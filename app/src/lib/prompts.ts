@@ -24,6 +24,9 @@ export function buildParseMessages(text: string, today: string) {
 4. deadline 必须写成 "YYYY-MM-DD HH:mm"，用空格分隔，**不要出现 T**。只给了日期没给时刻，一律按当天 23:59。
 5. 如果原文说"周五"，而今天正好是周五，理解为下一个周五；只有原文写了"今天"才用今天。
 6. 考试、报告、作业、论文都属于 ddl；只有"每周几固定上课"才是 course。
+7. 如果只能确定日期、确定不了几点（deadline 因此填成 23:59），fixed 必须是 false——不知道几点开始，就不能当成"到点要在场"的事。
+8. 社团培训、讲座、班会、面试这类一次性、必须到场、且原文给了具体时刻的：type 用 ddl，fixed 为 true，durationMin 填活动本身时长。
+9. 每天重复的事（背单词、跑步）用 habit，deadline 为 null。
 
 输出格式：{"activities":[{"title":"...","type":"ddl","deadline":"2026-11-26 20:00","durationMin":180,"priority":1,"remindBeforeMin":120,"fixed":false,"note":""}]}`
 

@@ -40,6 +40,26 @@ export function tomorrow(date = new Date()): Date {
   return d
 }
 
+/**
+ * 计划窗口：至少 3 天，但必须覆盖最远的截止日期，最多 7 天。
+ * 否则「下周三」的事会落在窗口外，用户会以为它丢了。
+ */
+export function planWindowDays(tasks: Activity[], now = new Date()): number {
+  const startOfToday = new Date(now)
+  startOfToday.setHours(0, 0, 0, 0)
+
+  let span = 3
+  for (const task of tasks) {
+    if (!task.deadline) continue
+    const due = new Date(task.deadline.replace(' ', 'T'))
+    if (Number.isNaN(due.getTime())) continue
+    due.setHours(0, 0, 0, 0)
+    const days = Math.round((due.getTime() - startOfToday.getTime()) / 86_400_000) + 1
+    if (days > span) span = days
+  }
+  return Math.min(7, span)
+}
+
 export function weekdayOf(date: Date): 1 | 2 | 3 | 4 | 5 | 6 | 7 {
   const d = date.getDay()
   return (d === 0 ? 7 : d) as 1 | 2 | 3 | 4 | 5 | 6 | 7
@@ -102,8 +122,14 @@ function fixedInterval(task: Activity): { date: string; start: number; end: numb
   if (!task.deadline) return null
   const d = new Date(task.deadline.replace(' ', 'T'))
   if (Number.isNaN(d.getTime())) return null
+
   const start = d.getHours() * 60 + d.getMinutes()
-  return { date: dayKey(d), start, end: Math.min(DAY_END, start + Math.max(MIN_BLOCK, task.durationMin)) }
+  // 23:59 这类「只有日期没有时刻」的兜底值不是真的到场时间，不能当固定日程处理
+  if (start >= DAY_END - 30) return null
+
+  const end = Math.min(DAY_END, start + Math.max(MIN_BLOCK, task.durationMin))
+  if (end - start < MIN_BLOCK) return null
+  return { date: dayKey(d), start, end }
 }
 
 /** 把任务装进未来 N 天的空档，返回逐块计划 */
@@ -115,13 +141,16 @@ export function planTasks(
   const { days = 3, from = new Date(), maxDailyMin = MAX_DAILY_MIN, order, remainingMin } = options
   const now = new Date()
 
-  const active = tasks.filter((t) => t.type !== 'course' && t.status !== 'done')
+  // 只把「没有截止时间的 course」当成周课表条目排除；
+  // 有截止时间的一次性活动（社团培训、讲座）必须参与排期
+  const active = tasks.filter((t) => t.status !== 'done' && (t.type !== 'course' || Boolean(t.deadline)))
   const fixed = active
     .filter((t) => t.fixed)
     .map((task) => ({ task, slot: fixedInterval(task) }))
     .filter((x): x is { task: Activity; slot: { date: string; start: number; end: number } } => x.slot !== null)
+  const fixedIds = new Set(fixed.map((f) => f.task.id))
 
-  const flexible = active.filter((t) => !t.fixed && t.type !== 'habit')
+  const flexible = active.filter((t) => !fixedIds.has(t.id) && t.type !== 'habit')
   let queue: Activity[]
   if (order && order.length) {
     const byId = new Map(flexible.map((t) => [t.id, t]))
@@ -161,10 +190,15 @@ export function planTasks(
 
     const busy = dayFixed.map((f) => [f.slot.start, f.slot.end] as [number, number])
     let budget = maxDailyMin
+    // 第一天不能把任务排到「已经过去的时间」里
+    const notBefore =
+      dayKey(date) === dayKey(now) ? Math.ceil((now.getHours() * 60 + now.getMinutes()) / 15) * 15 : 0
 
     for (const [slotStart, slotEnd] of freeSlots(date, courses, busy)) {
       if (budget < MIN_BLOCK) break
-      let cursor = slotStart
+      const begin = Math.max(slotStart, notBefore)
+      if (slotEnd - begin < MIN_BLOCK) continue
+      let cursor = begin
 
       for (const task of queue) {
         if (budget < MIN_BLOCK) break
@@ -194,10 +228,12 @@ export function planTasks(
       const used = blocks
         .filter((b) => b.date === key)
         .map((b) => [toMin(b.start), toMin(b.end)] as [number, number])
-      const rest = freeSlots(date, courses, [...busy, ...used])
+      const rest = freeSlots(date, courses, [...busy, ...used]).filter(
+        ([, end]) => end > notBefore + MIN_BLOCK,
+      )
       const evening = rest.find(([start]) => start >= 19 * 60) ?? rest[rest.length - 1]
       if (evening) {
-        let cursor = evening[0]
+        let cursor = Math.max(evening[0], notBefore)
         for (const habit of habits) {
           const dur = Math.min(60, Math.max(MIN_BLOCK, habit.durationMin))
           if (cursor + dur > evening[1]) break

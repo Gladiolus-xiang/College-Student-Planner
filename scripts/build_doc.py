@@ -90,6 +90,10 @@ def table(doc, header, rows, widths=None):
         for i, w in enumerate(scaled):
             t.columns[i].width = Cm(w)
         for row_index, row in enumerate(t.rows):
+            tr_pr = row._tr.get_or_add_trPr()
+            tr_pr.append(OxmlElement("w:cantSplit"))
+            if row_index == 0:
+                tr_pr.append(OxmlElement("w:tblHeader"))  # 跨页时重复表头
             for i, w in enumerate(scaled):
                 row.cells[i].width = Cm(w)
             for cell in row.cells:
@@ -188,7 +192,12 @@ body(doc, "今天做什么，是一个“替你决定今天先干什么”的日
 h2(doc, "3.2 核心闭环")
 body(doc, "粘贴一段文字 → AI 解析成活动（类型/截止/时长/是否固定日程）→ 规则引擎排进未来三天的空档 → "
           "AI 为每块安排写一句理由 → 到点提醒 → 习惯类打卡 → 没做完一键重排（AI 只排顺序，时间重新算）。")
-body(doc, "【配图：主界面截图 + 闭环示意图】")
+doc.add_picture(r"D:\AIGC\deliverables\assets\闭环图.png", width=Cm(14.4))
+doc.paragraphs[-1].alignment = 1
+cap = doc.add_paragraph()
+cap.alignment = 1
+set_font(cap.add_run("图 1　六步闭环：断任何一步，产品都不成立"), BODY_FONT, 9, False, (0x66, 0x66, 0x66))
+body(doc, "【配图：产品主界面截图，待补】")
 
 h2(doc, "3.3 三条设计原则")
 body(doc, "原则一：时间由代码算，理由由模型写。模型不擅长算术和约束检查，让它直接输出时间，会出现“凌晨三点写作业”“排在课上”“两个任务撞车”。"
@@ -216,7 +225,11 @@ h1(doc, "四、技术实现路径")
 h2(doc, "4.1 总体架构")
 body(doc, "浏览器端是单页应用（React + TypeScript），负责交互与渲染；数据存在 localStorage；"
           "模型调用不从前端直连，而是经由本地 Node 中间件转发，密钥只存在于服务端环境变量中。")
-body(doc, "【配图：架构图，三层：浏览器 / 本地代理 / DeepSeek API】")
+doc.add_picture(r"D:\AIGC\deliverables\assets\架构图.png", width=Cm(14.4))
+doc.paragraphs[-1].alignment = 1
+cap2 = doc.add_paragraph()
+cap2.alignment = 1
+set_font(cap2.add_run("图 2　三层架构：浏览器 / 本地中间件 / 模型接口"), BODY_FONT, 9, False, (0x66, 0x66, 0x66))
 
 h2(doc, "4.2 数据模型")
 mono(doc, """
@@ -379,6 +392,9 @@ table(doc,
           ["“周五”在当天被理解成今天", "相对时间有歧义", "增加规则：今天正好是周五则取下一个周五", "解析结果符合预期"],
           ["模型重排时漏掉任务", "生成式输出不保证完整", "校验层强制补齐缺失 id，编造的 id 丢弃", "任务不会凭空消失"],
           ["提醒在页面关闭后失效", "浏览器限制", "改为页面内卡片 + 系统通知双通道，并如实写入局限", "演示可稳定触达"],
+          ["计划里出现 23:59–23:00 的时间倒挂", "只有日期的活动被填成 23:59，又被判为固定日程", "提示词增加“无法确定时刻则 fixed=false”；引擎对 23:59 的固定日程退回普通任务", "时间倒挂消失，考试被正常排进当晚空档"],
+          ["社团培训没有出现在排期里", "一次性活动被解析成 course，而排期把 course 整体排除", "只排除“没有截止时间的 course”，有截止时间的一次性活动参与排期", "三类活动都能进计划"],
+          ["任务被排到当天已经过去的时间", "排期起点固定为 08:00，没有考虑当前时刻", "当天的可用区间从当前时间向上取整 15 分钟开始", "刷新后不会出现“早八点写作业”"],
       ],
       widths=[4.6, 4.2, 5.2, 3.6])
 
