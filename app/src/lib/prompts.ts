@@ -127,53 +127,30 @@ ${todoText}
   return [{ role: 'system' as const, content: system }]
 }
 
-/** V1 · 课表截图 → 课程列表 */
+/** V · 截图 → 课表或活动（先判断图里是哪种，再按对应格式输出） */
+export function buildScreenshotMessages(today: string) {
+  const system = `你在看一张手机截图，可能是两种之一：A. 教务系统的周课表（网格里排着课程名）；B. 群聊/通知截图（聊天记录里有人发了时间安排）。
 
-export function buildCourseImageMessages() {
-  const system = `你在看一张大学课表截图。请把它转换成结构化的课程列表。
+先判断是哪一种，再按对应格式输出 JSON，不要任何解释。
 
-只输出 JSON：
-{"courses":[{"name":"高等数学","weekday":1,"start":"08:00","end":"09:40","note":""}]}
+A. 课表 → {"kind":"course","courses":[{"name":"高等数学","weekday":1,"start":"08:00","end":"09:40","note":""}]}
+  1. weekday：1 = 周一，… 7 = 周日。
+  2. 时间用 24 小时制 HH:mm；截图写「第 1-2 节」就按作息换算：
+     第1节 08:00-08:45，第2节 08:55-09:40，第3节 10:00-10:45，第4节 10:55-11:40，
+     第5节 13:30-14:15，第6节 14:25-15:10，第7节 15:30-16:15，第8节 16:25-17:10，
+     第9节 18:30-19:15，第10节 19:25-20:10，第11节 20:20-21:05。
+  3. 一个格子里有多门课就拆成多条；看不清的不要编造。
 
-规则：
-1. weekday：1 = 周一，… 7 = 周日。
-2. 时间用 24 小时制 HH:mm。如果截图写的是「第 1-2 节」，按下面的作息换算：
-   第1节 08:00-08:45，第2节 08:55-09:40，第3节 10:00-10:45，第4节 10:55-11:40，
-   第5节 13:30-14:15，第6节 14:25-15:10，第7节 15:30-16:15，第8节 16:25-17:10，
-   第9节 18:30-19:15，第10节 19:25-20:10，第11节 20:20-21:05。
-3. 一个格子里有多门课，拆成多条。
-4. 看不清或无法确定的内容不要编造，直接跳过；整张图都不像课表就在 note 里说明。
-5. 只输出 JSON，不要任何解释。`
+B. 群聊/通知 → {"kind":"notice","activities":[{"title":"...","type":"ddl","deadline":"2026-11-26 20:00","durationMin":60,"priority":2,"remindBeforeMin":120,"fixed":false,"note":""}]}
+  字段：title 不超过 20 字；type 只能是 "ddl" | "habit" | "course" | "goal"；deadline 为 "YYYY-MM-DD HH:mm" 或 null；durationMin 原文没说给 60；priority 1 最紧急 / 2 一般 / 3 不急；remindBeforeMin 默认 120；fixed 为 true 表示到点必须到场；note 写没把握的地方。
+  1. 今天的日期是 ${today}，据此把"今晚""明天下午三点""下周三"换算成具体日期。
+  2. 忽略闲聊、表情、"收到""好的""+1" 这类回复，以及接龙报名里的人名。
+  3. 抓住通知本身的**事项**和**时间**，不要抓发送者说了什么客套话。
+  4. ${DATE_ONLY_RULE}
+  5. 班会、开会、讲座、面试这类一次性到场活动用 ddl（fixed 为 true），course 只留给「每周固定重复上的课」。
+  6. 写「七点半开会」「下午有实验」这类「时刻 + 有某事」的，时刻是**开始时间**不是截止时间：fixed 为 true，deadline 写这个时刻。
 
-  return [{ role: 'system' as const, content: system }]
-}
-
-/** V2 · 群聊 / 通知截图 → 活动列表 */
-
-export function buildNoticeImageMessages(today: string) {
-  const system = `你在看一张聊天软件（微信群、QQ 群）的截图。请找出其中与时间安排有关的内容——作业截止、考试、上课、会议、活动报名、比赛、缴费等——转换成待办活动。
-
-只输出 JSON：
-{"activities":[{"title":"...","type":"ddl","deadline":"2026-11-26 20:00","durationMin":60,"priority":2,"remindBeforeMin":120,"fixed":false,"note":""}]}
-
-字段说明：
-- title：简短标题，不超过 20 字
-- type：只能是 "ddl" | "habit" | "course" | "goal"（作业/考试/报名截止 = ddl；每周固定上课 = course；每天重复 = habit；有目标日期且要长期准备的 = goal）
-- deadline："YYYY-MM-DD HH:mm"，没有明确时间则 null
-- durationMin：一次预计要花多少分钟，原文没说就给 60
-- priority：1 最紧急 | 2 一般 | 3 不急
-- remindBeforeMin：提前多少分钟提醒，默认 120
-- fixed：true 表示到点必须到场（考试、开会、上课），且截图里写明了具体时刻
-- note：一句话说明你没把握的地方，没有就空字符串
-
-规则：
-1. 今天的日期是 ${today}，据此把"今晚""明天下午三点""下周三"换算成具体日期。
-2. 忽略闲聊、表情、"收到""好的""+1" 这类回复，以及接龙报名里的人名。
-3. 抓住通知本身的**事项**和**时间**，不要抓发送者说了什么客套话。
-4. ${DATE_ONLY_RULE}
-5. 班会、开会、讲座、面试这类一次性到场活动一律用 ddl（fixed 为 true），course 只留给「每周固定重复上的课」。
-6. 截图里写「七点半开会」「下午有实验」这类「时刻 + 有某事」的，时刻是**开始时间**，不是截止时间：fixed 为 true，deadline 写这个时刻。
-7. 截图里没有与时间有关的内容，就输出 {"activities":[]}。
+两种都不像、或图里没有与时间有关的内容：输出 {"kind":"other"}。
 
 只输出 JSON，不要任何解释。`
 

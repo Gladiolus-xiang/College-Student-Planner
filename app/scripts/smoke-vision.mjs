@@ -1,47 +1,58 @@
 /**
- * 识图链路冒烟测试：把本地截图发给视觉模型，看能不能拆出活动 / 课程。
- * 用法：node scripts/smoke-vision.mjs chat      （群通知）
- *       node scripts/smoke-vision.mjs timetable  （课表）
+ * 识图链路回归：同一套提示词，自己判断图里是课表还是群通知。
+ * 用法（需要 dev server）：node scripts/smoke-vision.mjs
  */
 import { readFile } from 'node:fs/promises'
 
-import { buildCourseImageMessages, buildNoticeImageMessages } from '../src/lib/prompts.ts'
+import { buildScreenshotMessages } from '../src/lib/prompts.ts'
 
-const kind = process.argv[2] ?? 'chat'
-const file = kind === 'timetable'
-  ? 'D:/AIGC/deliverables/assets/test/timetable.png'
-  : 'D:/AIGC/deliverables/assets/test/chat.png'
+const targets = [
+  { file: 'D:/AIGC/deliverables/assets/test/timetable.png', expect: 'course' },
+  { file: 'D:/AIGC/deliverables/assets/test/chat.png', expect: 'notice' },
+]
 
 const now = new Date()
 const p = (n) => String(n).padStart(2, '0')
 const today = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}（星期${'日一二三四五六'[now.getDay()]}）`
 
-const base64 = (await readFile(file)).toString('base64')
-const system = kind === 'timetable' ? buildCourseImageMessages()[0] : buildNoticeImageMessages(today)[0]
+let failed = 0
+for (const target of targets) {
+  const base64 = (await readFile(target.file)).toString('base64')
+  const res = await fetch('http://localhost:5173/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'deepseek-flash',
+      json: true,
+      messages: [
+        buildScreenshotMessages(today)[0],
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: '这张截图是课表还是群通知？按对应格式解析。' },
+            { type: 'image_url', image_url: { url: `data:image/png;base64,${base64}`, detail: 'high' } },
+          ],
+        },
+      ],
+    }),
+  })
 
-const res = await fetch('http://localhost:5173/api/chat', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    model: 'deepseek-flash',
-    json: true,
-    messages: [
-      system,
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: kind === 'timetable' ? '这是课表截图。' : '这是群聊截图，提取时间安排。' },
-          { type: 'image_url', image_url: { url: `data:image/png;base64,${base64}`, detail: 'high' } },
-        ],
-      },
-    ],
-  }),
-})
+  const data = await res.json()
+  if (!res.ok) {
+    console.error(`HTTP ${res.status}`, data)
+    failed += 1
+    continue
+  }
 
-const data = await res.json()
-if (!res.ok) {
-  console.error(`HTTP ${res.status}`, data)
-  process.exit(1)
+  const text = String(data.content)
+  const parsed = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1))
+  const count = parsed.courses?.length ?? parsed.activities?.length ?? 0
+  const ok = parsed.kind === target.expect && count > 0
+  if (!ok) failed += 1
+  console.log(
+    `${ok ? '✓' : '✗'} ${target.file.split('/').pop()} → kind=${parsed.kind}（期望 ${target.expect}），${count} 条，${data.ms}ms`,
+  )
 }
-console.log(`model=${data.model} ms=${data.ms} tokens=${data.usage?.total_tokens}`)
-console.log(data.content)
+
+console.log(failed ? `\n${failed} 项失败` : '\n全部通过')
+process.exit(failed ? 1 : 0)

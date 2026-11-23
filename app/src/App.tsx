@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { chat, extractJson } from './lib/api'
-import { buildCourseImageMessages, buildNoticeImageMessages, buildParseMessages } from './lib/prompts'
+import { buildParseMessages, buildScreenshotMessages } from './lib/prompts'
 import { explainPlan, reorderPlan } from './lib/plan'
 import { blockKey, groupByDay, dayKey, planTasks, planWindowDays, toMin, tomorrow } from './lib/schedule'
 import { humanizeRemaining, normalizeDeadline } from './lib/time'
@@ -100,7 +100,7 @@ function App() {
   const [text, setText] = useState('')
   const [items, setItems] = useState<Activity[]>(() => dedupeActivities(loadItems()).fresh)
   const [courses, setCourses] = useState<CourseSlot[]>(() => loadCourses() ?? SAMPLE_COURSES)
-  const [imageBusy, setImageBusy] = useState<'notice' | 'course' | null>(null)
+  const [imageBusy, setImageBusy] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [meta, setMeta] = useState('')
@@ -237,6 +237,24 @@ function App() {
     setItems((prev) => prev.map((a) => (a.id === id ? toggleCheckin(a) : a)))
   }
 
+  /** 单条删除：解析结果里总有需要扔掉的一条 */
+  const removeItem = (id: string) => {
+    setItems((prev) => prev.filter((a) => a.id !== id))
+    setReplanOrder((prev) => (prev ? prev.filter((x) => x !== id) : prev))
+  }
+
+  const clearAll = () => {
+    setItems([])
+    setDoneBlocks(new Set())
+    setPlanStart(null)
+    setReplanOrder(null)
+    setReplanRemaining(null)
+    setReplanSummary('')
+    setSummary('')
+    setRawJson('')
+    setError('')
+  }
+
   const handleDemoReminder = async () => {
     const permission = await ensureNotificationPermission()
     addToast(
@@ -320,83 +338,71 @@ function App() {
     }
   }
 
-  /** 截图识别：mode=notice 走群通知，mode=course 走课表 */
-  const handleImage = async (file: File, mode: 'notice' | 'course') => {
+  /** 截图识别：模型先判断图里是课表还是群通知，再按对应格式解析 —— 用户只需要「贴截图」一个动作 */
+  const handleImage = async (file: File) => {
     if (!isImageFile(file)) {
       setError('只支持图片文件（png / jpg / webp）')
       return
     }
     if (imageBusy) return
 
-    setImageBusy(mode)
+    setImageBusy(true)
     setError('')
     try {
       const dataUrl = await fileToDataUrl(file)
       const { iso, label } = nowParts()
       const today = `${iso}（${label}）`
-
-      const messages =
-        mode === 'course'
-          ? [
-              buildCourseImageMessages()[0],
-              {
-                role: 'user' as const,
-                content: [
-                  { type: 'text' as const, text: '这是我校课表截图，请转成课程列表。' },
-                  { type: 'image_url' as const, image_url: { url: dataUrl, detail: 'high' as const } },
-                ],
-              },
-            ]
-          : [
-              buildNoticeImageMessages(today)[0],
-              {
-                role: 'user' as const,
-                content: [
-                  { type: 'text' as const, text: '这是群聊截图，请把里面的时间安排提取成活动。' },
-                  { type: 'image_url' as const, image_url: { url: dataUrl, detail: 'high' as const } },
-                ],
-              },
-            ]
+      const messages = [
+        buildScreenshotMessages(today)[0],
+        {
+          role: 'user' as const,
+          content: [
+            { type: 'text' as const, text: '这张截图是课表还是群通知？按对应格式解析。' },
+            { type: 'image_url' as const, image_url: { url: dataUrl, detail: 'high' as const } },
+          ],
+        },
+      ]
 
       const result = await chat(messages, { json: true, model: VISION_MODEL })
       setRawJson(result.content)
+      setMeta(`${result.model} · ${result.ms}ms · ${result.usage?.total_tokens ?? '?'} tokens`)
 
-      if (mode === 'course') {
-        const parsed = extractJson<{ courses?: RawCourse[] }>(result.content)
+      const parsed = extractJson<{ kind?: string; courses?: RawCourse[]; activities?: RawActivity[] }>(result.content)
+      const looksLikeCourse = parsed.kind === 'course' || (!parsed.activities?.length && Boolean(parsed.courses?.length))
+
+      if (looksLikeCourse) {
         const list = normalizeCourses(parsed.courses ?? [])
         const { fresh: courseList, skipped } = dedupeCourses(list)
         if (!courseList.length) throw new Error('没有识别出课程，换一张更清晰的课表截图试试')
         setCourses(courseList)
         saveCourses(courseList)
-        setMeta(`${result.model} · ${result.ms}ms · ${result.usage?.total_tokens ?? '?'} tokens`)
         addToast(`识别到 ${courseList.length} 门课`, skipped ? `另有 ${skipped} 条重复已跳过` : '排期会自动避开这些时段')
-      } else {
-        const parsed = extractJson<{ activities?: RawActivity[] }>(result.content)
-        const list = normalize(parsed.activities ?? [])
-        const { fresh, skipped } = dedupeActivities(list, items)
-        if (!list.length) throw new Error('这张截图里没有找到与时间有关的内容')
-        setMeta(`${result.model} · ${result.ms}ms · ${result.usage?.total_tokens ?? '?'} tokens`)
-        if (!fresh.length) {
-          addToast('没有新内容', `这 ${list.length} 件事已经在计划里了`)
-          return
-        }
-        setItems((prev) => [...prev, ...fresh])
-        addToast(`从截图里读出 ${fresh.length} 件事`, skipped ? `另有 ${skipped} 条重复已跳过` : '已经加入下方的计划')
+        return
       }
+
+      const list = normalize(parsed.activities ?? [])
+      if (!list.length) throw new Error('这张截图既不像课表，也没有找到与时间有关的内容')
+      const { fresh, skipped } = dedupeActivities(list, items)
+      if (!fresh.length) {
+        addToast('没有新内容', `这 ${list.length} 件事已经在计划里了`)
+        return
+      }
+      setItems((prev) => [...prev, ...fresh])
+      addToast(`从截图里读出 ${fresh.length} 件事`, skipped ? `另有 ${skipped} 条重复已跳过` : '已经加入下方的计划')
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
-      setImageBusy(null)
+      setImageBusy(false)
     }
   }
 
-  const pickImage = (mode: 'notice' | 'course') => {
+  const pickImage = () => {
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = 'image/*'
     input.onchange = () => {
       const file = input.files?.[0]
-      if (file) void handleImage(file, mode)
+      if (file) void handleImage(file)
     }
     input.click()
   }
@@ -412,16 +418,16 @@ function App() {
       setRawJson(result.content)
       const parsed = extractJson<{ activities?: RawActivity[] }>(result.content)
       const list = normalize(parsed.activities ?? [])
-      const { fresh, skipped } = dedupeActivities(list)
-      if (!fresh.length) throw new Error('模型没有拆出任何活动，换一段文字试试')
-      setItems(fresh)
-      if (skipped) addToast(`合并了 ${skipped} 条重复`, '同一件事只留一份')
-      setDoneBlocks(new Set())
-      setPlanStart(null)
-      setReplanOrder(null)
-      setReplanRemaining(null)
-      setReplanSummary('')
+      const { fresh, skipped } = dedupeActivities(list, items)
+      if (!list.length) throw new Error('模型没有拆出任何活动，换一段文字试试')
       setMeta(`${result.model} · ${result.ms}ms · ${result.usage?.total_tokens ?? '?'} tokens`)
+      if (!fresh.length) {
+        addToast('没有新内容', `这 ${list.length} 件事已经在计划里了`)
+        return
+      }
+      // 追加而不是整批替换：之前识别出的课表/通知不会因为再解析一段文字就消失
+      setItems((prev) => [...prev, ...fresh])
+      addToast(`解析出 ${fresh.length} 项`, skipped ? `另有 ${skipped} 条重复已跳过` : '已加入下方计划')
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -466,13 +472,13 @@ function App() {
                 const file = Array.from(e.clipboardData.files).find(isImageFile)
                 if (file) {
                   e.preventDefault()
-                  void handleImage(file, 'notice')
+                  void handleImage(file)
                 }
               }}
               onDrop={(e) => {
                 e.preventDefault()
                 const file = Array.from(e.dataTransfer.files).find(isImageFile)
-                if (file) void handleImage(file, 'notice')
+                if (file) void handleImage(file)
               }}
               onDragOver={(e) => e.preventDefault()}
               spellCheck={false}
@@ -492,23 +498,15 @@ function App() {
             </div>
 
             <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
-              <span className="text-[11px] text-slate-400">或者贴图</span>
               <button
                 type="button"
-                onClick={() => pickImage('notice')}
-                disabled={imageBusy !== null}
+                onClick={pickImage}
+                disabled={imageBusy}
                 className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600 transition hover:border-slate-400 hover:text-slate-900 disabled:opacity-50 sm:px-2.5 sm:py-1 sm:text-[11px]"
               >
-                {imageBusy === 'notice' ? '识别通知中…' : '📷 群通知截图'}
+                {imageBusy ? '识别中…' : '📷 贴截图识别'}
               </button>
-              <button
-                type="button"
-                onClick={() => pickImage('course')}
-                disabled={imageBusy !== null}
-                className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600 transition hover:border-slate-400 hover:text-slate-900 disabled:opacity-50 sm:px-2.5 sm:py-1 sm:text-[11px]"
-              >
-                {imageBusy === 'course' ? '识别课表中…' : '🗓 课表截图'}
-              </button>
+              <span className="text-[11px] text-slate-400">课表、群通知都行；电脑上也能直接 Ctrl+V</span>
               <span className="ml-auto text-[11px] text-slate-300">当前课表 {courses.length} 门</span>
             </div>
             {error && <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{error}</p>}
@@ -517,7 +515,18 @@ function App() {
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-medium text-slate-700">解析结果</h2>
-              <span className="text-xs text-slate-400">{items.length ? `${items.length} 项` : '—'}</span>
+              <div className="flex items-center gap-3">
+                {items.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={clearAll}
+                    className="text-[11px] text-slate-400 transition hover:text-rose-600"
+                  >
+                    清空
+                  </button>
+                )}
+                <span className="text-xs text-slate-400">{items.length ? `${items.length} 项` : '—'}</span>
+              </div>
             </div>
 
             {items.length === 0 ? (
@@ -535,9 +544,19 @@ function App() {
                     >
                       <div className="flex items-start justify-between gap-3">
                         <p className="text-sm font-medium text-slate-900">{item.title}</p>
-                        <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-medium ${metaInfo.chip}`}>
-                          {metaInfo.label}
-                        </span>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-medium ${metaInfo.chip}`}>
+                            {metaInfo.label}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removeItem(item.id)}
+                            aria-label={`删除 ${item.title}`}
+                            className="px-1 text-xs leading-none text-slate-300 transition hover:text-rose-600"
+                          >
+                            ×
+                          </button>
+                        </div>
                       </div>
                       <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
                         <span>

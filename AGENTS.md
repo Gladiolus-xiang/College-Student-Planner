@@ -28,6 +28,7 @@ npm.cmd run dev      # 必须 npm.cmd，Windows 禁 npm.ps1
 9. 每日额度靠 KV，绑定变量名必须是 `QUOTA`；没绑定时代码自动跳过限流、不报错——所以「额度没生效」先查绑定，不是查代码。
 10. 去重口径只有一处：`src/lib/dedupe.ts`（标题归一 + 截止时间）。别在 `App.tsx` 里另写一遍相等比较——两处口径迟早对不上。
 11. 固定日程的 `deadline` 存的是**开始时刻**（`fixedInterval` 拿它当到场时间）。提示词里凡是「几点 + 有某事」都要判成 fixed，界面文案说「开始」不写「截止」。
+12. 录入是「追加」不是「替换」：解析/截图结果先去重再 append，绝不能 `setItems(新数组)` 把已有活动冲掉。截图入口只有一个（`pickImage()`），视觉提示词只有 `buildScreenshotMessages`，不要再按课表/通知拆两条。
 
 ## 改完跑什么
 
@@ -52,7 +53,7 @@ npm.cmd run build                # 类型检查 + 构建
 
 ## 路标
 
-- 为什么这么设计：`docs/decisions-schedule-app.md`（D1–D19）
+- 为什么这么设计：`docs/decisions-schedule-app.md`（D1–D20）
 - 怎么发布给别人用：`docs/deploy-edgeone.md`
 - 提交材料：`deliverables/`（项目文档、PPT 大纲、演示视频脚本、配图）
 - 回归脚本：`app/scripts/`
