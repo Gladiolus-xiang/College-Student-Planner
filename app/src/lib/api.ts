@@ -1,6 +1,10 @@
+export type TextPart = { type: 'text'; text: string }
+export type ImagePart = { type: 'image_url'; image_url: { url: string; detail?: 'low' | 'high' | 'auto' } }
+export type ChatContent = string | Array<TextPart | ImagePart>
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
-  content: string
+  content: ChatContent
 }
 
 export interface ChatResult {
@@ -11,11 +15,19 @@ export interface ChatResult {
 }
 
 /** 调本地代理 → DeepSeek。密钥在服务端，前端只发消息。 */
-export async function chat(messages: ChatMessage[], opts: { json?: boolean; temperature?: number } = {}): Promise<ChatResult> {
+export async function chat(
+  messages: ChatMessage[],
+  opts: { json?: boolean; temperature?: number; model?: string } = {},
+): Promise<ChatResult> {
   const res = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, json: opts.json ?? false, temperature: opts.temperature ?? 0.2 }),
+    body: JSON.stringify({
+      messages,
+      json: opts.json ?? false,
+      temperature: opts.temperature ?? 0.2,
+      model: opts.model,
+    }),
   })
 
   const data = await res.json().catch(() => null)

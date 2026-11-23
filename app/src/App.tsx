@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { chat, extractJson } from './lib/api'
-import { buildParseMessages } from './lib/prompts'
+import { buildCourseImageMessages, buildNoticeImageMessages, buildParseMessages } from './lib/prompts'
 import { explainPlan, reorderPlan } from './lib/plan'
 import { blockKey, groupByDay, dayKey, planTasks, planWindowDays, toMin, tomorrow } from './lib/schedule'
 import { humanizeRemaining, normalizeDeadline } from './lib/time'
 import { isCheckedToday, streakDays, toggleCheckin } from './lib/checkin'
 import { ensureNotificationPermission, findDue, reminderKey, systemNotify } from './lib/reminder'
-import { loadItems, saveItems } from './lib/store'
+import { loadCourses, loadItems, saveCourses, saveItems } from './lib/store'
+import { VISION_MODEL, fileToDataUrl, isImageFile } from './lib/vision'
 import { SAMPLE_COURSES } from './data/courses'
-import { TYPE_META, type Activity, type ActivityType } from './types'
+import { TYPE_META, type Activity, type ActivityType, type CourseSlot } from './types'
 
 const SAMPLE = `下周三（11月26日）晚上8点前交《机器学习》实验报告，大概要写3小时。
 周五下午2点英语四级模拟考。
@@ -24,6 +25,14 @@ interface RawActivity {
   priority?: number
   remindBeforeMin?: number
   fixed?: boolean
+  note?: string
+}
+
+interface RawCourse {
+  name?: string
+  weekday?: number
+  start?: string
+  end?: string
   note?: string
 }
 
@@ -66,9 +75,31 @@ function normalize(raw: RawActivity[]): Activity[] {
     })
 }
 
+function normalizeCourses(raw: RawCourse[]): CourseSlot[] {
+  const HHMM = /^([01]?\d|2[0-3]):([0-5]\d)$/
+
+  return raw
+    .filter((item) => typeof item.name === 'string' && item.name.trim() && typeof item.start === 'string' && typeof item.end === 'string')
+    .map((item) => {
+      const weekday = Math.min(7, Math.max(1, Math.round(Number(item.weekday) || 1))) as CourseSlot['weekday']
+      const start = String(item.start).trim()
+      const end = String(item.end).trim()
+      return {
+        id: crypto.randomUUID(),
+        name: String(item.name).trim().slice(0, 20),
+        weekday,
+        start: HHMM.test(start) ? start.padStart(5, '0') : '08:00',
+        end: HHMM.test(end) ? end.padStart(5, '0') : '09:40',
+      }
+    })
+    .filter((course) => course.start < course.end)
+}
+
 function App() {
   const [text, setText] = useState('')
   const [items, setItems] = useState<Activity[]>(() => loadItems())
+  const [courses, setCourses] = useState<CourseSlot[]>(() => loadCourses() ?? SAMPLE_COURSES)
+  const [imageBusy, setImageBusy] = useState<'notice' | 'course' | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [meta, setMeta] = useState('')
@@ -92,16 +123,25 @@ function App() {
   const blocks = useMemo(
     () =>
       items.length
-        ? planTasks(items, SAMPLE_COURSES, {
+        ? planTasks(items, courses, {
             days: windowDays,
             from: planStart ?? undefined,
             order: replanOrder ?? undefined,
             remainingMin: replanRemaining ?? undefined,
           })
         : [],
-    [items, planStart, replanOrder, replanRemaining, windowDays],
+    [items, courses, planStart, replanOrder, replanRemaining, windowDays],
   )
   const dayPlans = useMemo(() => groupByDay(blocks, items), [blocks, items])
+
+  /** 有活动没能排进这个窗口（时间不够，或截止更远），要如实告诉用户，不能让它悄悄消失 */
+  const unplanned = useMemo(
+    () =>
+      items.filter(
+        (item) => item.type !== 'habit' && item.status !== 'done' && !blocks.some((b) => b.activityId === item.id),
+      ),
+    [items, blocks],
+  )
 
   /** 每块计划里，第一次出现的那个活动的区块（分段任务只在第一段写理由） */
   const firstBlockKeys = useMemo(() => {
@@ -278,6 +318,81 @@ function App() {
     }
   }
 
+  /** 截图识别：mode=notice 走群通知，mode=course 走课表 */
+  const handleImage = async (file: File, mode: 'notice' | 'course') => {
+    if (!isImageFile(file)) {
+      setError('只支持图片文件（png / jpg / webp）')
+      return
+    }
+    if (imageBusy) return
+
+    setImageBusy(mode)
+    setError('')
+    try {
+      const dataUrl = await fileToDataUrl(file)
+      const { iso, label } = nowParts()
+      const today = `${iso}（${label}）`
+
+      const messages =
+        mode === 'course'
+          ? [
+              buildCourseImageMessages()[0],
+              {
+                role: 'user' as const,
+                content: [
+                  { type: 'text' as const, text: '这是我校课表截图，请转成课程列表。' },
+                  { type: 'image_url' as const, image_url: { url: dataUrl, detail: 'high' as const } },
+                ],
+              },
+            ]
+          : [
+              buildNoticeImageMessages(today)[0],
+              {
+                role: 'user' as const,
+                content: [
+                  { type: 'text' as const, text: '这是群聊截图，请把里面的时间安排提取成活动。' },
+                  { type: 'image_url' as const, image_url: { url: dataUrl, detail: 'high' as const } },
+                ],
+              },
+            ]
+
+      const result = await chat(messages, { json: true, model: VISION_MODEL })
+      setRawJson(result.content)
+
+      if (mode === 'course') {
+        const parsed = extractJson<{ courses?: RawCourse[] }>(result.content)
+        const list = normalizeCourses(parsed.courses ?? [])
+        if (!list.length) throw new Error('没有识别出课程，换一张更清晰的课表截图试试')
+        setCourses(list)
+        saveCourses(list)
+        setMeta(`${result.model} · ${result.ms}ms · ${result.usage?.total_tokens ?? '?'} tokens`)
+        addToast(`识别到 ${list.length} 门课`, '排期会自动避开这些时段')
+      } else {
+        const parsed = extractJson<{ activities?: RawActivity[] }>(result.content)
+        const list = normalize(parsed.activities ?? [])
+        if (!list.length) throw new Error('这张截图里没有找到与时间有关的内容')
+        setItems((prev) => [...prev, ...list])
+        setMeta(`${result.model} · ${result.ms}ms · ${result.usage?.total_tokens ?? '?'} tokens`)
+        addToast(`从截图里读出 ${list.length} 件事`, '已经加入下方的计划')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setImageBusy(null)
+    }
+  }
+
+  const pickImage = (mode: 'notice' | 'course') => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/png,image/jpeg,image/webp,image/gif'
+    input.onchange = () => {
+      const file = input.files?.[0]
+      if (file) void handleImage(file, mode)
+    }
+    input.click()
+  }
+
   async function handleParse() {
     if (!text.trim() || loading) return
     setLoading(true)
@@ -337,9 +452,22 @@ function App() {
               id="raw"
               value={text}
               onChange={(e) => setText(e.target.value)}
+              onPaste={(e) => {
+                const file = Array.from(e.clipboardData.files).find(isImageFile)
+                if (file) {
+                  e.preventDefault()
+                  void handleImage(file, 'notice')
+                }
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                const file = Array.from(e.dataTransfer.files).find(isImageFile)
+                if (file) void handleImage(file, 'notice')
+              }}
+              onDragOver={(e) => e.preventDefault()}
               spellCheck={false}
               className="h-60 w-full resize-none rounded-xl border border-slate-200 bg-slate-50/60 p-4 text-sm leading-7 text-slate-800 outline-none transition focus:border-slate-400 focus:bg-white"
-              placeholder="粘贴群通知、作业要求、考试安排……"
+              placeholder="粘贴群通知、作业要求、考试安排……也可以直接 Ctrl+V 贴截图"
             />
             <div className="mt-3 flex items-center justify-between gap-3">
               <span className="text-xs text-slate-400">{text.length} 字</span>
@@ -351,6 +479,27 @@ function App() {
               >
                 {loading ? '解析中…' : 'AI 解析 →'}
               </button>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+              <span className="text-[11px] text-slate-400">或者贴图</span>
+              <button
+                type="button"
+                onClick={() => pickImage('notice')}
+                disabled={imageBusy !== null}
+                className="rounded-lg border border-slate-200 px-2.5 py-1 text-[11px] text-slate-600 transition hover:border-slate-400 hover:text-slate-900 disabled:opacity-50"
+              >
+                {imageBusy === 'notice' ? '识别通知中…' : '📷 群通知截图'}
+              </button>
+              <button
+                type="button"
+                onClick={() => pickImage('course')}
+                disabled={imageBusy !== null}
+                className="rounded-lg border border-slate-200 px-2.5 py-1 text-[11px] text-slate-600 transition hover:border-slate-400 hover:text-slate-900 disabled:opacity-50"
+              >
+                {imageBusy === 'course' ? '识别课表中…' : '🗓 课表截图'}
+              </button>
+              <span className="ml-auto text-[11px] text-slate-300">当前课表 {courses.length} 门</span>
             </div>
             {error && <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{error}</p>}
           </section>
@@ -504,6 +653,14 @@ function App() {
                 </div>
               ))}
             </div>
+
+            {unplanned.length > 0 && (
+              <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-[11px] leading-5 text-slate-500">
+                还有 {unplanned.length} 项没排进这 {windowDays} 天：
+                {unplanned.map((item) => item.title).join('、')}
+                {unplanned.some((item) => item.deadline) ? '——要么截止更远，要么这几天实在塞不下。' : '——这几天塞不下了。'}
+              </p>
+            )}
           </section>
         )}
 

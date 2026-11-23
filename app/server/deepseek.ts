@@ -4,7 +4,9 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 
 const DEFAULT_BASE = 'https://api.deepseek.com'
 const DEFAULT_MODEL = 'deepseek-chat'
-const MAX_BODY = 200_000
+/** 截图识别要用视觉模型；图片 base64 会撑大请求体，所以上限放到 12 MB */
+const MAX_BODY = 12 * 1024 * 1024
+const UPSTREAM_TIMEOUT_MS = 120_000
 
 /** 把 .env 读进 process.env（Vite 只会把 VITE_ 前缀的变量暴露给浏览器，服务端要自己读） */
 export function loadEnv(): void {
@@ -110,7 +112,7 @@ export async function chatProxy(req: IncomingMessage, res: ServerResponse): Prom
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     })
     const text = await upstream.text()
     if (!upstream.ok) {
@@ -137,7 +139,7 @@ export async function chatProxy(req: IncomingMessage, res: ServerResponse): Prom
     const timedOut = message.includes('timed out') || message.includes('abort')
     logCall({ ok: false, model, ms: Date.now() - started, error: message })
     return send(res, 502, {
-      error: timedOut ? '模型响应超时（60 秒），请重试' : '调用模型失败',
+      error: timedOut ? '模型响应超时，请重试（识别截图会比纯文字慢）' : '调用模型失败',
       detail: message,
     })
   }
