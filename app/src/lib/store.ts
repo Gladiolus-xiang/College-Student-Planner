@@ -23,14 +23,6 @@ export function saveItems(items: Activity[]): void {
   }
 }
 
-export function clearItems(): void {
-  try {
-    localStorage.removeItem(KEY)
-  } catch {
-    // ignore
-  }
-}
-
 /** 课表：识别成功后覆盖默认示例课表，刷新后保留 */
 export function loadCourses(): CourseSlot[] | null {
   try {

@@ -1,11 +1,9 @@
 #!/bin/sh
 # 提交前检查：单个文本文件超过 20 KB（约 5000 token）就拒绝提交。
 # 图片、Office 文档、lockfile、构建产物不检查。
-# 已存在的大文件列在 ALLOW 里，属于历史遗留，不再拦截。
+# 没有白名单：超了就拆，不要再往这里加文件名。
 
 LIMIT=20480
-ALLOW="app/src/App.tsx
-scripts/build_doc.py"
 
 fail=0
 
@@ -24,12 +22,7 @@ for f in $(git diff --cached --name-only --diff-filter=ACM); do
   esac
   [ "$size" -le "$LIMIT" ] && continue
 
-  kb=$((size / 1024))
-
-  if printf '%s\n' "$ALLOW" | grep -qxF "$f"; then
-    echo "提示：$f 有 ${kb} KB，属历史遗留（已白名单），本次放行。" >&2
-    continue
-  fi
+  kb=$(( (size + 1023) / 1024 ))
 
   echo "" >&2
   echo "✗ 提交被拒绝：$f 有 ${kb} KB，超过 20 KB 上限" >&2

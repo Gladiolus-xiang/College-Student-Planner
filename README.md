@@ -25,7 +25,7 @@ app/              产品原型（Vite + React + TypeScript + Tailwind v4）
   scripts/        回归脚本（改完提示词先跑一遍）
 docs/             决策记录 + 部署说明
 deliverables/     项目文档、PPT 大纲、演示视频脚本、配图
-scripts/          文档与配图生成脚本
+scripts/          配图与测试截图生成脚本
 ```
 
 ## 核心设计

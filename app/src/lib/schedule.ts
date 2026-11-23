@@ -9,7 +9,8 @@ import type { Activity, CourseSlot, PlanBlock } from '../types'
 
 const DAY_START = 8 * 60
 const DAY_END = 23 * 60
-const MAX_DAILY_MIN = 240
+/** 单日最多排多少分钟。界面上的「单日上限 N 小时」也从这里算，别再写死一个 4 */
+export const MAX_DAILY_MIN = 240
 const MIN_BLOCK = 30
 const BREAKS: Array<[number, number]> = [
   [12 * 60, 13 * 60 + 30], // 午饭

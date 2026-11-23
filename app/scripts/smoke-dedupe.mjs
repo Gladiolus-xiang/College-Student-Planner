@@ -1,5 +1,5 @@
 /**
- * 离线回归：去重口径。
+ * 离线回归：去重口径（标题归一 + 截止时间 + 习惯钟点）。
  * 跑法：node scripts/smoke-dedupe.mjs
  */
 import { dedupeActivities, dedupeCourses } from '../src/lib/dedupe.ts'

@@ -2,15 +2,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { chat, extractJson } from './lib/api'
 import { buildParseMessages, buildScreenshotMessages } from './lib/prompts'
 import { explainPlan, reorderPlan } from './lib/plan'
-import { blockKey, groupByDay, dayKey, planTasks, planWindowDays, toMin, tomorrow } from './lib/schedule'
-import { humanizeRemaining, normalizeDeadline } from './lib/time'
-import { isCheckedToday, streakDays, toggleCheckin } from './lib/checkin'
+import { dayKey, groupByDay, planTasks, planWindowDays, toMin, tomorrow } from './lib/schedule'
+import { toggleCheckin } from './lib/checkin'
 import { dedupeActivities, dedupeCourses } from './lib/dedupe'
 import { ensureNotificationPermission, findDue, reminderKey, systemNotify } from './lib/reminder'
 import { loadCourses, loadItems, saveCourses, saveItems } from './lib/store'
 import { VISION_MODEL, fileToDataUrl, isImageFile } from './lib/vision'
+import { normalizeActivities, normalizeCourses, type RawActivity, type RawCourse } from './lib/normalize'
 import { SAMPLE_COURSES } from './data/courses'
-import { TYPE_META, type Activity, type ActivityType, type CourseSlot } from './types'
+import { Composer } from './components/Composer'
+import { CourseBoard } from './components/CourseBoard'
+import { ParseList } from './components/ParseList'
+import { PlanBoard } from './components/PlanBoard'
+import type { Activity, CourseSlot } from './types'
 
 const SAMPLE = `下周三（11月26日）晚上8点前交《机器学习》实验报告，大概要写3小时。
 周五下午2点英语四级模拟考。
@@ -18,94 +22,19 @@ const SAMPLE = `下周三（11月26日）晚上8点前交《机器学习》实�
 12月12日上午9点四级正式考试。
 每周二、四晚上7-9点上高数辅导课。`
 
-interface RawActivity {
-  title?: string
-  type?: string
-  deadline?: string | null
-  durationMin?: number
-  priority?: number
-  remindBeforeMin?: number
-  fixed?: boolean
-  preferStart?: string
-  note?: string
-}
-
-interface RawCourse {
-  name?: string
-  weekday?: number
-  start?: string
-  end?: string
-  note?: string
-}
-
 interface ToastItem {
   id: string
   title: string
   body: string
 }
 
-const TYPES: ActivityType[] = ['ddl', 'habit', 'course', 'goal']
-
 const pad = (n: number) => String(n).padStart(2, '0')
-
-const HHMM = /^([01]?\d|2[0-3]):([0-5]\d)$/
-
-/** 模型给的 "20:00" 才收，其它一律当没给 */
-function normalizeClock(input: unknown): string | undefined {
-  const text = String(input ?? '').trim()
-  return HHMM.test(text) ? text.padStart(5, '0') : undefined
-}
 
 function nowParts() {
   const d = new Date()
   const week = '日一二三四五六'[d.getDay()]
   const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
   return { iso, label: `${iso}（星期${week}）` }
-}
-
-function normalize(raw: RawActivity[]): Activity[] {
-  return raw
-    .filter((item) => typeof item.title === 'string' && item.title.trim().length > 0)
-    .map((item) => {
-      const type = TYPES.includes(item.type as ActivityType) ? (item.type as ActivityType) : 'ddl'
-      const priority = Math.min(3, Math.max(1, Math.round(Number(item.priority) || 2))) as 1 | 2 | 3
-      const deadline = normalizeDeadline(item.deadline)
-      // 习惯没有截止时间：模型偶尔还是会给 deadline，就把它当成「每天几点」，
-      // 别在列表里写成「截止 20:00」——那会让人以为 8 点必须跑完
-      const habitClock = type === 'habit' ? normalizeClock(item.preferStart) ?? normalizeClock(deadline?.slice(11)) : undefined
-      return {
-        id: crypto.randomUUID(),
-        title: String(item.title).trim(),
-        type,
-        deadline: type === 'habit' ? null : deadline,
-        durationMin: Math.max(5, Math.round(Number(item.durationMin) || 60)),
-        priority,
-        remindBeforeMin: Math.max(0, Math.round(Number(item.remindBeforeMin) || 120)),
-        fixed: item.fixed === true,
-        preferStart: habitClock,
-        note: item.note || '',
-        source: 'ai' as const,
-        status: 'todo' as const,
-      }
-    })
-}
-
-function normalizeCourses(raw: RawCourse[]): CourseSlot[] {
-  return raw
-    .filter((item) => typeof item.name === 'string' && item.name.trim() && typeof item.start === 'string' && typeof item.end === 'string')
-    .map((item) => {
-      const weekday = Math.min(7, Math.max(1, Math.round(Number(item.weekday) || 1))) as CourseSlot['weekday']
-      const start = String(item.start).trim()
-      const end = String(item.end).trim()
-      return {
-        id: crypto.randomUUID(),
-        name: String(item.name).trim().slice(0, 20),
-        weekday,
-        start: HHMM.test(start) ? start.padStart(5, '0') : '08:00',
-        end: HHMM.test(end) ? end.padStart(5, '0') : '09:40',
-      }
-    })
-    .filter((course) => course.start < course.end)
 }
 
 function App() {
@@ -157,18 +86,6 @@ function App() {
       ),
     [items, blocks],
   )
-
-  /** 每块计划里，第一次出现的那个活动的区块（分段任务只在第一段写理由） */
-  const firstBlockKeys = useMemo(() => {
-    const seen = new Set<string>()
-    const keys = new Set<string>()
-    for (const block of blocks) {
-      if (seen.has(block.activityId)) continue
-      seen.add(block.activityId)
-      keys.add(`${block.activityId}@${block.date}@${block.start}`)
-    }
-    return keys
-  }, [blocks])
 
   useEffect(() => {
     if (!blocks.length) {
@@ -297,6 +214,7 @@ function App() {
 
     const todayK = dayKey(new Date())
     const todays = blocks.filter((b) => b.date === todayK)
+
     if (!todays.length) {
       addToast('今天没有安排', '不需要重排')
       return
@@ -304,7 +222,7 @@ function App() {
 
     const completedMin = new Map<string, number>()
     for (const block of blocks) {
-      if (!doneBlocks.has(blockKey(block))) continue
+      if (!doneBlocks.has(`${block.activityId}@${block.date}@${block.start}`)) continue
       const minutes = toMin(block.end) - toMin(block.start)
       completedMin.set(block.activityId, (completedMin.get(block.activityId) ?? 0) + minutes)
     }
@@ -395,7 +313,7 @@ function App() {
         return
       }
 
-      const list = normalize(parsed.activities ?? [])
+      const list = normalizeActivities(parsed.activities ?? [])
       if (!list.length) throw new Error('这张截图既不像课表，也没有找到与时间有关的内容')
       const { fresh, skipped } = dedupeActivities(list, items)
       if (!fresh.length) {
@@ -432,7 +350,7 @@ function App() {
       const result = await chat(buildParseMessages(text, `${iso}（${label}）`), { json: true })
       setRawJson(result.content)
       const parsed = extractJson<{ activities?: RawActivity[] }>(result.content)
-      const list = normalize(parsed.activities ?? [])
+      const list = normalizeActivities(parsed.activities ?? [])
       const { fresh, skipped } = dedupeActivities(list, items)
       if (!list.length) throw new Error('模型没有拆出任何活动，换一段文字试试')
       setMeta(`${result.model} · ${result.ms}ms · ${result.usage?.total_tokens ?? '?'} tokens`)
@@ -466,302 +384,41 @@ function App() {
         </header>
 
         <div className="grid gap-4 sm:gap-6 lg:grid-cols-[1.05fr_1fr]">
-          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-            <div className="mb-3 flex items-center justify-between">
-              <label htmlFor="raw" className="text-sm font-medium text-slate-700">
-                原始文字
-              </label>
-              <button
-                type="button"
-                onClick={() => setText(SAMPLE)}
-                className="text-xs text-slate-400 transition hover:text-slate-700"
-              >
-                填入示例
-              </button>
-            </div>
-            <textarea
-              id="raw"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              onPaste={(e) => {
-                const file = Array.from(e.clipboardData.files).find(isImageFile)
-                if (file) {
-                  e.preventDefault()
-                  void handleImage(file)
-                }
-              }}
-              onDrop={(e) => {
-                e.preventDefault()
-                const file = Array.from(e.dataTransfer.files).find(isImageFile)
-                if (file) void handleImage(file)
-              }}
-              onDragOver={(e) => e.preventDefault()}
-              spellCheck={false}
-              className="h-44 w-full resize-none rounded-xl border border-slate-200 bg-slate-50/60 p-4 text-base leading-7 text-slate-800 outline-none transition focus:border-slate-400 focus:bg-white sm:h-60 sm:text-sm"
-              placeholder="粘贴群通知、作业要求、考试安排……电脑上可以直接 Ctrl+V 贴截图"
-            />
-            <div className="mt-3 flex items-center justify-between gap-3">
-              <span className="text-xs text-slate-400">{text.length} 字</span>
-              <button
-                type="button"
-                onClick={handleParse}
-                disabled={loading || !text.trim()}
-                className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:py-2.5"
-              >
-                {loading ? '解析中…' : 'AI 解析 →'}
-              </button>
-            </div>
-
-            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
-              <button
-                type="button"
-                onClick={pickImage}
-                disabled={imageBusy}
-                className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600 transition hover:border-slate-400 hover:text-slate-900 disabled:opacity-50 sm:px-2.5 sm:py-1 sm:text-[11px]"
-              >
-                {imageBusy ? '识别中…' : '📷 贴截图识别'}
-              </button>
-              <span className="text-[11px] text-slate-400">课表、群通知都行；电脑上也能直接 Ctrl+V</span>
-              <span className="ml-auto text-[11px] text-slate-300">当前课表 {courses.length} 门</span>
-            </div>
-            {error && <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{error}</p>}
-          </section>
-
-          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-medium text-slate-700">解析结果</h2>
-              <div className="flex items-center gap-3">
-                {items.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={clearAll}
-                    className="text-[11px] text-slate-400 transition hover:text-rose-600"
-                  >
-                    清空
-                  </button>
-                )}
-                <span className="text-xs text-slate-400">{items.length ? `${items.length} 项` : '—'}</span>
-              </div>
-            </div>
-
-            {items.length === 0 ? (
-              <div className="flex h-60 items-center justify-center rounded-xl border border-dashed border-slate-200 text-sm text-slate-400">
-                还没有结果，点上面的「AI 解析」
-              </div>
-            ) : (
-              <ul className="space-y-2.5">
-                {items.map((item) => {
-                  const metaInfo = TYPE_META[item.type]
-                  return (
-                    <li
-                      key={item.id}
-                      className={`rounded-xl border border-slate-200 border-l-4 ${metaInfo.accent} bg-white px-3.5 py-3`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <p className="text-sm font-medium text-slate-900">{item.title}</p>
-                        <div className="flex shrink-0 items-center gap-1">
-                          <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-medium ${metaInfo.chip}`}>
-                            {metaInfo.label}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => removeItem(item.id)}
-                            aria-label={`删除 ${item.title}`}
-                            className="px-1 text-xs leading-none text-slate-300 transition hover:text-rose-600"
-                          >
-                            ×
-                          </button>
-                        </div>
-                      </div>
-                      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
-                        <span>
-                          {item.deadline
-                            ? item.fixed
-                              ? `${item.deadline.slice(11)} 开始 · 固定日程`
-                              : `截止 ${item.deadline} · ${humanizeRemaining(item.deadline)}`
-                            : item.preferStart
-                              ? `每天 ${item.preferStart} 开始`
-                              : '无明确截止'}
-                        </span>
-                        <span>预计 {item.durationMin} 分钟</span>
-                        <span>优先级 {item.priority}</span>
-                      </div>
-                      {item.note ? <p className="mt-1 text-[11px] text-amber-600">⚠ {item.note}</p> : null}
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-
-            {rawJson && (
-              <details className="mt-4 text-xs text-slate-400">
-                <summary className="cursor-pointer select-none hover:text-slate-600">查看模型原始输出</summary>
-                <pre className="mt-2 max-h-48 overflow-auto rounded-lg bg-slate-900 p-3 text-[11px] leading-5 text-slate-200">
-                  {rawJson}
-                </pre>
-              </details>
-            )}
-          </section>
+          <Composer
+            text={text}
+            onTextChange={setText}
+            sample={SAMPLE}
+            onParse={handleParse}
+            loading={loading}
+            imageBusy={imageBusy}
+            onPickImage={pickImage}
+            onImageFile={(file) => void handleImage(file)}
+            error={error}
+            courseCount={courses.length}
+          />
+          <ParseList items={items} onRemove={removeItem} onClear={clearAll} rawJson={rawJson} />
         </div>
 
-        {courses.length > 0 && (
-          <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:mt-6 sm:p-5">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-sm font-medium text-slate-700">本周课表</h2>
-              <span className="text-[11px] text-slate-400">
-                {courses.length} 门 · {coursesImported ? '排期自动避开这些时段' : '示例课表，贴一张课表截图换成你的'}
-              </span>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {([1, 2, 3, 4, 5, 6, 7] as const).map((weekday) => {
-                const list = courses
-                  .filter((c) => c.weekday === weekday)
-                  .sort((a, b) => a.start.localeCompare(b.start))
-                if (!list.length) return null
-                return (
-                  <div key={weekday} className="rounded-xl bg-slate-50/80 px-3 py-2.5">
-                    <p className="mb-1.5 text-[11px] font-medium text-slate-500">
-                      周{'一二三四五六日'[weekday - 1]}
-                    </p>
-                    <ul className="space-y-1">
-                      {list.map((course) => (
-                        <li key={course.id} className="flex items-baseline gap-2 text-[11px]">
-                          <span className="shrink-0 tabular-nums text-slate-400">{course.start}</span>
-                          <span className="truncate text-slate-700">{course.name}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )
-              })}
-            </div>
-          </section>
-        )}
+        <CourseBoard courses={courses} imported={coursesImported} />
 
-        {dayPlans.length === 0 && (
-          <section className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-center sm:mt-6">
-            <p className="text-sm text-slate-500">
-              {courses.length
-                ? `${coursesImported ? '' : '示例'}课表 ${courses.length} 门已就位，排期会自动避开上课时间。`
-                : '还没有可排的活动。'}
-            </p>
-            <p className="mt-1 text-xs text-slate-400">
-              粘一段群通知，或点上面的「填入示例」，这里就会出现未来几天的安排。
-            </p>
-          </section>
-        )}
-
-        {dayPlans.length > 0 && (
-          <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:mt-6 sm:p-5">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-sm font-medium text-slate-700">未来 {windowDays} 天 · 自动排期</h2>
-              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                <span className="text-[11px] text-slate-400">
-                  {explainState === 'loading'
-                    ? 'AI 正在写理由…'
-                    : explainState === 'error'
-                      ? '理由生成失败，先用规则文案'
-                      : '先保截止，再塞空档 · 单日上限 4 小时 · 已避开课程与饭点'}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleDemoReminder}
-                  className="rounded-lg border border-slate-200 px-2.5 py-1 text-[11px] text-slate-600 transition hover:border-slate-400 hover:text-slate-900"
-                >
-                  🔔 60 秒后演示提醒
-                </button>
-                <button
-                  type="button"
-                  onClick={handleReplan}
-                  disabled={replanState === 'loading'}
-                  className="rounded-lg border border-slate-300 px-2.5 py-1 text-[11px] text-slate-700 transition hover:border-slate-500 disabled:opacity-50"
-                >
-                  ↻ {replanState === 'loading' ? '重排中…' : '今天没做完，重排'}
-                </button>
-              </div>
-            </div>
-            {summary && (
-              <p className="mb-3 rounded-lg bg-amber-50/70 px-3 py-2 text-xs leading-5 text-amber-900">
-                <span className="mr-1.5 font-medium text-amber-700">今日一句</span>
-                {summary}
-              </p>
-            )}
-            {replanSummary && (
-              <p className="mb-3 rounded-lg bg-sky-50 px-3 py-2 text-xs leading-5 text-sky-900">
-                <span className="mr-1.5 font-medium text-sky-700">已重排</span>
-                {replanSummary}
-              </p>
-            )}
-            <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
-              {dayPlans.map((day) => (
-                <div key={day.date} className="rounded-xl bg-slate-50/80 p-3">
-                  <p className="mb-2 flex items-baseline gap-2 text-xs font-medium text-slate-600">
-                    {day.date.slice(5)}
-                    <span className="text-[11px] font-normal text-slate-400">{day.weekday}</span>
-                  </p>
-                  <ul className="space-y-1.5">
-                    {day.blocks.map((block, i) => (
-                      <li key={`${block.activityId}-${i}`} className="rounded-lg border border-slate-200 bg-white px-2.5 py-2">
-                        <div className="flex items-start gap-2">
-                          <button
-                            type="button"
-                            onClick={() => toggleBlockDone(blockKey(block))}
-                            aria-label="标记完成"
-                            className={`mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border text-[9px] leading-none transition ${
-                              doneBlocks.has(blockKey(block))
-                                ? 'border-emerald-500 bg-emerald-500 text-white'
-                                : 'border-slate-300 text-transparent hover:border-slate-500'
-                            }`}
-                          >
-                            ✓
-                          </button>
-                          <span className="text-[11px] tabular-nums text-slate-400">
-                            {block.start}–{block.end}
-                          </span>
-                          <span
-                            className={`flex-1 truncate text-right text-[12px] ${
-                              doneBlocks.has(blockKey(block)) ? 'text-slate-400 line-through' : 'text-slate-800'
-                            }`}
-                          >
-                            {block.activity?.title}
-                          </span>
-                        </div>
-                        <p className="mt-0.5 text-[10px] leading-4 text-slate-500">
-                          {firstBlockKeys.has(`${block.activityId}@${block.date}@${block.start}`)
-                            ? aiReasons[block.activityId] ?? block.reason
-                            : block.reason}
-                        </p>
-                        {block.activity?.type === 'habit' && block.date === todayStr && (
-                          <button
-                            type="button"
-                            onClick={() => handleCheckin(block.activityId)}
-                            className={`mt-1.5 rounded-md px-2 py-0.5 text-[10px] transition ${
-                              isCheckedToday(block.activity)
-                                ? 'bg-emerald-50 text-emerald-700'
-                                : 'border border-slate-200 text-slate-500 hover:border-emerald-400 hover:text-emerald-700'
-                            }`}
-                          >
-                            {isCheckedToday(block.activity)
-                              ? `✓ 已打卡 · 连续 ${streakDays(block.activity.checkins)} 天`
-                              : '打卡'}
-                          </button>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-
-            {unplanned.length > 0 && (
-              <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-[11px] leading-5 text-slate-500">
-                还有 {unplanned.length} 项没排进这 {windowDays} 天：
-                {unplanned.map((item) => item.title).join('、')}
-                {unplanned.some((item) => item.deadline) ? '——要么截止更远，要么这几天实在塞不下。' : '——这几天塞不下了。'}
-              </p>
-            )}
-          </section>
-        )}
+        <PlanBoard
+          dayPlans={dayPlans}
+          windowDays={windowDays}
+          explainState={explainState}
+          summary={summary}
+          replanSummary={replanSummary}
+          replanLoading={replanState === 'loading'}
+          onReplan={handleReplan}
+          onDemoReminder={handleDemoReminder}
+          doneBlocks={doneBlocks}
+          onToggleBlock={toggleBlockDone}
+          aiReasons={aiReasons}
+          onCheckin={handleCheckin}
+          todayStr={todayStr}
+          unplanned={unplanned}
+          courseCount={courses.length}
+          coursesImported={coursesImported}
+        />
 
         <footer className="mt-8 text-xs text-slate-400">原型 v0.3</footer>
       </div>
