@@ -100,6 +100,8 @@ function App() {
   const [text, setText] = useState('')
   const [items, setItems] = useState<Activity[]>(() => dedupeActivities(loadItems()).fresh)
   const [courses, setCourses] = useState<CourseSlot[]>(() => loadCourses() ?? SAMPLE_COURSES)
+  /** 课表是系统示例还是自己导入的 —— 文案要能说清，别让人以为页面自己冒出 9 门课 */
+  const [coursesImported, setCoursesImported] = useState<boolean>(() => loadCourses() !== null)
   const [imageBusy, setImageBusy] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -376,6 +378,7 @@ function App() {
         if (!courseList.length) throw new Error('没有识别出课程，换一张更清晰的课表截图试试')
         setCourses(courseList)
         saveCourses(courseList)
+        setCoursesImported(true)
         addToast(`识别到 ${courseList.length} 门课`, skipped ? `另有 ${skipped} 条重复已跳过` : '排期会自动避开这些时段')
         return
       }
@@ -586,6 +589,53 @@ function App() {
             )}
           </section>
         </div>
+
+        {courses.length > 0 && (
+          <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:mt-6 sm:p-5">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-medium text-slate-700">本周课表</h2>
+              <span className="text-[11px] text-slate-400">
+                {courses.length} 门 · {coursesImported ? '排期自动避开这些时段' : '示例课表，贴一张课表截图换成你的'}
+              </span>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {([1, 2, 3, 4, 5, 6, 7] as const).map((weekday) => {
+                const list = courses
+                  .filter((c) => c.weekday === weekday)
+                  .sort((a, b) => a.start.localeCompare(b.start))
+                if (!list.length) return null
+                return (
+                  <div key={weekday} className="rounded-xl bg-slate-50/80 px-3 py-2.5">
+                    <p className="mb-1.5 text-[11px] font-medium text-slate-500">
+                      周{'一二三四五六日'[weekday - 1]}
+                    </p>
+                    <ul className="space-y-1">
+                      {list.map((course) => (
+                        <li key={course.id} className="flex items-baseline gap-2 text-[11px]">
+                          <span className="shrink-0 tabular-nums text-slate-400">{course.start}</span>
+                          <span className="truncate text-slate-700">{course.name}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+        )}
+
+        {dayPlans.length === 0 && (
+          <section className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-center sm:mt-6">
+            <p className="text-sm text-slate-500">
+              {courses.length
+                ? `${coursesImported ? '' : '示例'}课表 ${courses.length} 门已就位，排期会自动避开上课时间。`
+                : '还没有可排的活动。'}
+            </p>
+            <p className="mt-1 text-xs text-slate-400">
+              粘一段群通知，或点上面的「填入示例」，这里就会出现未来几天的安排。
+            </p>
+          </section>
+        )}
 
         {dayPlans.length > 0 && (
           <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:mt-6 sm:p-5">

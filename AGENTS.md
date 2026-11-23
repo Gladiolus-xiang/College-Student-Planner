@@ -44,6 +44,20 @@ npm.cmd run build                # 类型检查 + 构建
 
 `smoke-parse` / `smoke-reasons` / `smoke-reorder` / `smoke-vision` / `smoke-start-time` 需要 dev server 在跑（它们会真实调用模型）。
 
+界面改动另跑真浏览器回归（Playwright + 本机 Edge，需要完全访问权限，否则浏览器管道报 EPERM）：
+
+```powershell
+node scripts/e2e-course-import.mjs   # 贴课表截图 → 本周课表出现、无任务时给引导、控制台无报错，截图存 deliverables/assets/test/
+```
+
+## 规则与拦法
+
+| 规则 | 由什么拦住 |
+|---|---|
+| 交差前跑通测试；界面改动附截图 | `e2e-course-import.mjs`（真浏览器 + 控制台报错检查） |
+| 录入只追加、不覆盖已有活动 | 解析/截图都只经 `dedupeActivities`，没有别的写入路径 |
+| 单个文本文件不超 20 KB | `.githooks/pre-commit` |
+
 ## 提交前
 
 仓库装了文件大小钩子（`.githooks/pre-commit`）：单个文本文件超过 20 KB 拒绝提交。图片、Office 文档、lockfile 不查。
@@ -53,7 +67,7 @@ npm.cmd run build                # 类型检查 + 构建
 
 ## 路标
 
-- 为什么这么设计：`docs/decisions-schedule-app.md`（D1–D20）
+- 为什么这么设计：`docs/decisions-schedule-app.md`（D1–D21）
 - 怎么发布给别人用：`docs/deploy-edgeone.md`
 - 提交材料：`deliverables/`（项目文档、PPT 大纲、演示视频脚本、配图）
 - 回归脚本：`app/scripts/`
