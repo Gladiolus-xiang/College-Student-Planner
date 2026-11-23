@@ -24,3 +24,7 @@ Thumbs.db
 
 # Office 打开文件时产生的临时锁文件
 ~$*
+
+# 提交信息临时文件
+.commitmsg.tmp
+
