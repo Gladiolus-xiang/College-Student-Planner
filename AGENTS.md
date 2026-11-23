@@ -2,6 +2,10 @@
 
 大学生日程编排原型（杭电 AIGC 大赛 · 赛题一）。粘贴一段文字或一张截图 → 结构化活动 → 规则引擎排进课表空档 → 提醒 / 打卡 / 重排。
 
+# 修改要求
+  1.改完用Git存档
+  2.修改后更新deliverables中的内容
+
 ## 跑起来
 
 ```powershell
@@ -22,12 +26,14 @@ npm.cmd run dev      # 必须 npm.cmd，Windows 禁 npm.ps1
 7. **`/api/chat` 只有一份实现**：`app/edge-functions/api/chat.js`。`app/server/deepseek.ts` 只是把 Node 的 req/res 翻译成 Request/Response 的本地壳，不要在里面另写一份逻辑。线上跑边缘函数，本地跑同一个 `handleChat`。
 8. **线上请求体上限 1 MB**（边缘函数的硬限制）。截图在前端压到 1280px / JPEG 0.82，超了自动降档；不要把 `MAX_BODY_CHARS` 调大，那只会把 413 从函数里挪到平台层。
 9. 每日额度靠 KV，绑定变量名必须是 `QUOTA`；没绑定时代码自动跳过限流、不报错——所以「额度没生效」先查绑定，不是查代码。
+10. 去重口径只有一处：`src/lib/dedupe.ts`（标题归一 + 截止时间）。别在 `App.tsx` 里另写一遍相等比较——两处口径迟早对不上。
 
 ## 改完跑什么
 
 ```powershell
 cd app
 node scripts/smoke-quota.mjs     # 代理边界：同源、额度、缺 key（离线，不联网）
+node scripts/smoke-dedupe.mjs    # 去重口径（离线，不联网）
 node scripts/smoke-plan.mjs      # 排期不冲突
 node scripts/smoke-edge.mjs      # 时间倒挂、漏排、过期时段
 node scripts/smoke-reminder.mjs  # 打卡连续天数、提醒窗口
@@ -45,7 +51,7 @@ npm.cmd run build                # 类型检查 + 构建
 
 ## 路标
 
-- 为什么这么设计：`docs/decisions-schedule-app.md`（D1–D17）
+- 为什么这么设计：`docs/decisions-schedule-app.md`（D1–D18）
 - 怎么发布给别人用：`docs/deploy-edgeone.md`
 - 提交材料：`deliverables/`（项目文档、PPT 大纲、演示视频脚本、配图）
 - 回归脚本：`app/scripts/`

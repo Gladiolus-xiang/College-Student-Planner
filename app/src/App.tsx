@@ -5,6 +5,7 @@ import { explainPlan, reorderPlan } from './lib/plan'
 import { blockKey, groupByDay, dayKey, planTasks, planWindowDays, toMin, tomorrow } from './lib/schedule'
 import { humanizeRemaining, normalizeDeadline } from './lib/time'
 import { isCheckedToday, streakDays, toggleCheckin } from './lib/checkin'
+import { dedupeActivities, dedupeCourses } from './lib/dedupe'
 import { ensureNotificationPermission, findDue, reminderKey, systemNotify } from './lib/reminder'
 import { loadCourses, loadItems, saveCourses, saveItems } from './lib/store'
 import { VISION_MODEL, fileToDataUrl, isImageFile } from './lib/vision'
@@ -97,7 +98,7 @@ function normalizeCourses(raw: RawCourse[]): CourseSlot[] {
 
 function App() {
   const [text, setText] = useState('')
-  const [items, setItems] = useState<Activity[]>(() => loadItems())
+  const [items, setItems] = useState<Activity[]>(() => dedupeActivities(loadItems()).fresh)
   const [courses, setCourses] = useState<CourseSlot[]>(() => loadCourses() ?? SAMPLE_COURSES)
   const [imageBusy, setImageBusy] = useState<'notice' | 'course' | null>(null)
   const [loading, setLoading] = useState(false)
@@ -362,18 +363,24 @@ function App() {
       if (mode === 'course') {
         const parsed = extractJson<{ courses?: RawCourse[] }>(result.content)
         const list = normalizeCourses(parsed.courses ?? [])
-        if (!list.length) throw new Error('没有识别出课程，换一张更清晰的课表截图试试')
-        setCourses(list)
-        saveCourses(list)
+        const { fresh: courseList, skipped } = dedupeCourses(list)
+        if (!courseList.length) throw new Error('没有识别出课程，换一张更清晰的课表截图试试')
+        setCourses(courseList)
+        saveCourses(courseList)
         setMeta(`${result.model} · ${result.ms}ms · ${result.usage?.total_tokens ?? '?'} tokens`)
-        addToast(`识别到 ${list.length} 门课`, '排期会自动避开这些时段')
+        addToast(`识别到 ${courseList.length} 门课`, skipped ? `另有 ${skipped} 条重复已跳过` : '排期会自动避开这些时段')
       } else {
         const parsed = extractJson<{ activities?: RawActivity[] }>(result.content)
         const list = normalize(parsed.activities ?? [])
+        const { fresh, skipped } = dedupeActivities(list, items)
         if (!list.length) throw new Error('这张截图里没有找到与时间有关的内容')
-        setItems((prev) => [...prev, ...list])
         setMeta(`${result.model} · ${result.ms}ms · ${result.usage?.total_tokens ?? '?'} tokens`)
-        addToast(`从截图里读出 ${list.length} 件事`, '已经加入下方的计划')
+        if (!fresh.length) {
+          addToast('没有新内容', `这 ${list.length} 件事已经在计划里了`)
+          return
+        }
+        setItems((prev) => [...prev, ...fresh])
+        addToast(`从截图里读出 ${fresh.length} 件事`, skipped ? `另有 ${skipped} 条重复已跳过` : '已经加入下方的计划')
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -404,8 +411,10 @@ function App() {
       setRawJson(result.content)
       const parsed = extractJson<{ activities?: RawActivity[] }>(result.content)
       const list = normalize(parsed.activities ?? [])
-      if (!list.length) throw new Error('模型没有拆出任何活动，换一段文字试试')
-      setItems(list)
+      const { fresh, skipped } = dedupeActivities(list)
+      if (!fresh.length) throw new Error('模型没有拆出任何活动，换一段文字试试')
+      setItems(fresh)
+      if (skipped) addToast(`合并了 ${skipped} 条重复`, '同一件事只留一份')
       setDoneBlocks(new Set())
       setPlanStart(null)
       setReplanOrder(null)
