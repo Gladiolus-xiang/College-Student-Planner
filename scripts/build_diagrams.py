@@ -105,8 +105,8 @@ def build_architecture():
          ["录入与解析", "三天计划视图", "打卡与提醒", "localStorage"]),
         ("02", "本地 Node 中间件", "Vite 插件挂载 · 四十行代码", ACCENT,
          ["POST /api/chat", "校验层 · 补齐归一", "从 .env 注入密钥", "写调用日志"]),
-        ("03", "DeepSeek API", "deepseek-chat · 国内直连", GREEN,
-         ["P1 抽取活动", "P2 解释计划", "P3 重排顺序", "结构化 JSON"]),
+        ("03", "DeepSeek API", "deepseek-chat / deepseek-flash · 国内直连", GREEN,
+         ["P1 抽取活动", "P2 解释计划", "P3 重排顺序", "V 读截图"]),
     ]
 
     top, card_h, gap = 90, 210, 95
