@@ -25,8 +25,8 @@ Thumbs.db
 # Office 打开文件时产生的临时锁文件
 ~$*
 
-# 识图测试用的假截图（由 scripts/make_test_images.py 生成）
-deliverables/assets/test/
+# 提交材料（项目文档、PPT 大纲、视频脚本、配图、测试截图）只留本地，不进仓库
+deliverables/
 
 # 提交信息临时文件
 .commitmsg.tmp

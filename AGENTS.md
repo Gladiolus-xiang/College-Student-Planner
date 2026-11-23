@@ -78,5 +78,5 @@ node scripts/e2e-deadline-reminder.mjs  # 马上截止的事：不排到截止�
 
 - 为什么这么设计：`docs/decisions-schedule-app.md`（D1–D23）
 - 怎么发布给别人用：`docs/deploy-edgeone.md`
-- 提交材料：`deliverables/`（项目文档、PPT 大纲、演示视频脚本、配图）
+- 提交材料：`deliverables/`（项目文档、PPT 大纲、演示视频脚本、配图）——**只留本地，已进 `.gitignore`，不要提交进仓库**
 - 回归脚本：`app/scripts/`

@@ -24,7 +24,7 @@ app/              产品原型（Vite + React + TypeScript + Tailwind v4）
   src/lib/        提示词、规则排期引擎、打卡、提醒、识图
   scripts/        回归脚本（改完提示词先跑一遍）
 docs/             决策记录 + 部署说明
-deliverables/     项目文档、PPT 大纲、演示视频脚本、配图
+deliverables/     项目文档、PPT 大纲、演示视频脚本、配图（只留本地，不进仓库）
 scripts/          配图与测试截图生成脚本
 ```
 
