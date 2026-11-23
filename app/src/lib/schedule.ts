@@ -133,6 +133,16 @@ function fixedInterval(task: Activity): { date: string; start: number; end: numb
   return { date: dayKey(d), start, end }
 }
 
+/** 当天这个任务最晚能排到哪一分钟：硬截止之前。过了截止那天返回 0，不再往后排。 */
+function deadlineCapMin(task: Activity, key: string): number {
+  const due = parseDeadline(task.deadline)
+  if (!due) return DAY_END
+  const dueKey = dayKey(due)
+  if (key < dueKey) return DAY_END
+  if (key > dueKey) return 0
+  return Math.min(DAY_END, due.getHours() * 60 + due.getMinutes())
+}
+
 /** 把任务装进未来 N 天的空档，返回逐块计划 */
 export function planTasks(
   tasks: Activity[],
@@ -206,8 +216,10 @@ export function planTasks(
         const left = remaining.get(task.id) ?? 0
         if (left < MIN_BLOCK) continue
 
-        const chunk = Math.min(slotEnd - cursor, left, budget)
-        if (chunk < MIN_BLOCK) break
+        // 有硬截止的：这一块必须赶在截止之前做完，排不进去就不排，别排出「截止之后才动工」
+        const cap = Math.min(slotEnd, deadlineCapMin(task, key))
+        const chunk = Math.min(cap - cursor, left, budget)
+        if (chunk < MIN_BLOCK) continue
 
         blocks.push({
           date: key,

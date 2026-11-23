@@ -5,7 +5,7 @@ import { explainPlan, reorderPlan } from './lib/plan'
 import { dayKey, groupByDay, planTasks, planWindowDays, toMin, tomorrow } from './lib/schedule'
 import { toggleCheckin } from './lib/checkin'
 import { dedupeActivities, dedupeCourses } from './lib/dedupe'
-import { ensureNotificationPermission, findDue, reminderKey, systemNotify } from './lib/reminder'
+import { ensureNotificationPermission, findDue, reminderKey, reminderTitle, systemNotify } from './lib/reminder'
 import { loadCourses, loadItems, saveCourses, saveItems } from './lib/store'
 import { VISION_MODEL, fileToDataUrl, isImageFile } from './lib/vision'
 import { normalizeActivities, normalizeCourses, type RawActivity, type RawCourse } from './lib/normalize'
@@ -151,9 +151,10 @@ function App() {
   // 每 15 秒扫一次「该提醒的事」
   useEffect(() => {
     const tick = () => {
-      for (const activity of findDue(items, new Date(), firedRef.current)) {
+      const now = new Date()
+      for (const activity of findDue(items, now, firedRef.current)) {
         firedRef.current.add(reminderKey(activity))
-        const title = `还有 ${activity.remindBeforeMin} 分钟：${activity.title}`
+        const title = reminderTitle(activity, now)
         const body = activity.deadline ? `截止 ${activity.deadline}` : ''
         systemNotify(title, body)
         addToast(title, body)

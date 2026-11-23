@@ -57,12 +57,17 @@ try {
   const plan = page.locator('section', { hasText: '自动排期' })
   const result = page.locator('section', { hasText: '解析结果' })
 
-  const runCard = plan.locator('li', { hasText: '跑步' }).first()
-  await runCard.waitFor({ timeout: 10_000 })
-  const card = await runCard.innerText()
+  // 今天已经过了 20:00 时，今天的卡会顺延——所以只看未来几天里有没有 20:00 开始的卡
+  const cards = plan.locator('li', { hasText: '跑步' })
+  await cards.first().waitFor({ timeout: 10_000 })
+  const all = await cards.allInnerTexts()
 
-  check('计划卡片从 20:00 开始', card.includes('20:00–21:00'), card.split('\n').join(' / '))
-  check('没有把 8 点当成结束时间（不出现 19:00）', !card.includes('19:00'), card.split('\n').join(' / '))
+  check('有卡片从 20:00 开始', all.some((t) => t.includes('20:00–21:00')), all.map((t) => t.split('\n').join(' ')).join(' | '))
+  check(
+    '没有把 8 点当成结束时间（不出现 19:00 开始）',
+    all.every((t) => !t.includes('19:00')),
+    all.map((t) => t.split('\n').slice(0, 2).join(' ')).join(' | '),
+  )
 
   const row = await result.locator('li', { hasText: '跑步' }).first().innerText()
   check('活动列表写「每天 20:00 开始」', row.includes('每天 20:00 开始'), row.split('\n').join(' / '))

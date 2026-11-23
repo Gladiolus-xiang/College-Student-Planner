@@ -4,6 +4,7 @@
  */
 import { MAX_DAILY_MIN, blockKey, type DayPlan } from '../lib/schedule'
 import { isCheckedToday, streakDays } from '../lib/checkin'
+import { parseDeadline } from '../lib/time'
 import type { Activity } from '../types'
 
 interface PlanBoardProps {
@@ -25,6 +26,17 @@ interface PlanBoardProps {
   coursesImported: boolean
 }
 
+/** 没排进计划的原因：截止已过、离截止太近、还是单纯塞不下 */
+function unplannedReason(item: Activity): string {
+  const due = parseDeadline(item.deadline)
+  if (!due) return '——这几天塞不下了'
+
+  const leftMin = Math.round((due.getTime() - Date.now()) / 60_000)
+  if (leftMin <= 0) return '——截止时间已过，没排进计划'
+  if (leftMin < 30) return `——离截止只剩 ${leftMin} 分钟，塞不进去`
+  return '——要么截止更远，要么这几天实在塞不下'
+}
+
 export function PlanBoard({
   dayPlans,
   windowDays,
@@ -43,7 +55,7 @@ export function PlanBoard({
   courseCount,
   coursesImported,
 }: PlanBoardProps) {
-  if (dayPlans.length === 0) {
+  if (dayPlans.length === 0 && unplanned.length === 0) {
     return (
       <section className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-center sm:mt-6">
         <p className="text-sm text-slate-500">
@@ -168,11 +180,17 @@ export function PlanBoard({
       </div>
 
       {unplanned.length > 0 && (
-        <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-[11px] leading-5 text-slate-500">
+        <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-[11px] leading-5 text-slate-500">
           还有 {unplanned.length} 项没排进这 {windowDays} 天：
-          {unplanned.map((item) => item.title).join('、')}
-          {unplanned.some((item) => item.deadline) ? '——要么截止更远，要么这几天实在塞不下。' : '——这几天塞不下了。'}
-        </p>
+          <ul className="mt-0.5 space-y-0.5">
+            {unplanned.map((item) => (
+              <li key={item.id}>
+                · {item.title}
+                {unplannedReason(item)}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </section>
   )

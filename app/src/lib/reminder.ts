@@ -12,18 +12,44 @@ export function reminderKey(activity: Activity): string {
   return `${activity.id}@${activity.deadline}`
 }
 
+/** 补发窗口：提醒时刻错过后，只要截止还剩这么久，就立刻补一条「快到点了」 */
+const CATCH_UP_MIN = 30
+
 /**
  * 找出「现在该提醒」的活动。
- * 只补发最近 30 分钟内的，避免一打开页面就炸出一堆几天前的过期提醒。
+ * 两种情况：① 提醒时刻刚过（30 分钟内）；② 提醒时刻早就过了，但截止只剩 30 分钟以内
+ * —— 后者是「20:05 才录一条 20:06 截止的事」，提前两小时的提醒时刻早就过去了，
+ * 不补发的话页面一声不响，用户只能自己盯着表。
  */
 export function findDue(items: Activity[], now: Date, fired: Set<string>): Activity[] {
   return items.filter((activity) => {
     const at = reminderAt(activity)
     if (!at) return false
-    const diff = now.getTime() - at.getTime()
-    if (diff < 0 || diff > 30 * 60_000) return false
-    return !fired.has(reminderKey(activity))
+    if (fired.has(reminderKey(activity))) return false
+
+    const lateMin = (now.getTime() - at.getTime()) / 60_000
+    if (lateMin < 0) return false
+    if (lateMin <= CATCH_UP_MIN) return true
+
+    const due = parseDeadline(activity.deadline)
+    if (!due) return false
+    const leftMin = (due.getTime() - now.getTime()) / 60_000
+    return leftMin > 0 && leftMin <= CATCH_UP_MIN
   })
+}
+
+/** 提醒标题：按「离截止还有多久」说人话，不用那个可能早就过时的提前量 */
+export function reminderTitle(activity: Activity, now: Date): string {
+  const due = parseDeadline(activity.deadline)
+  if (!due) return activity.title
+
+  const left = Math.round((due.getTime() - now.getTime()) / 60_000)
+  if (left <= 0) return `已过截止：${activity.title}`
+  if (left < 60) return `还有 ${left} 分钟：${activity.title}`
+
+  const hours = Math.floor(left / 60)
+  const minutes = left % 60
+  return minutes ? `还有 ${hours} 小时 ${minutes} 分钟：${activity.title}` : `还有 ${hours} 小时：${activity.title}`
 }
 
 export async function ensureNotificationPermission(): Promise<NotificationPermission | 'unsupported'> {

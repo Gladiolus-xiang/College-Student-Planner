@@ -31,6 +31,8 @@ npm.cmd run dev      # 必须 npm.cmd，Windows 禁 npm.ps1
 11. 固定日程的 `deadline` 存的是**开始时刻**（`fixedInterval` 拿它当到场时间）。提示词里凡是「几点 + 有某事」都要判成 fixed，界面文案说「开始」不写「截止」。
 12. **习惯（habit）没有截止时间**：`deadline` 恒为 null，原文说的钟点存 `preferStart`（"20:00"）。排期按 `preferStart` 开始，没说才默认 19:00；钟点被占就顺延并在理由里写明，别默认 19:00 开始、20:00 结束——那看着像「8 点截止」。
 13. 录入是「追加」不是「替换」：解析/截图结果先去重再 append，绝不能 `setItems(新数组)` 把已有活动冲掉。截图入口只有一个（`pickImage()`），视觉提示词只有 `buildScreenshotMessages`，不要再按课表/通知拆两条。
+14. **排期必须尊重截止**：有 deadline 的任务，每一块都要在截止前结束（`schedule.ts` 的 `deadlineCapMin`）。排不进去就不排，交给「没排上」列表说明原因——绝不能排出「20:15 才动工，20:06 截止」这种块。
+15. **别用 PowerShell 的 `Set-Content` / `-replace` 改源码**：会把中文写成乱码（已经毁过一次 `schedule.ts`）。改文件只用编辑工具，或者用 Python 显式 `encoding='utf-8'`。
 
 ## 改完跑什么
 
@@ -40,7 +42,8 @@ node scripts/smoke-quota.mjs     # 代理边界：同源、额度、缺 key（�
 node scripts/smoke-dedupe.mjs    # 去重口径（离线，不联网）
 node scripts/smoke-plan.mjs      # 排期不冲突
 node scripts/smoke-edge.mjs      # 时间倒挂、漏排、过期时段
-node scripts/smoke-reminder.mjs  # 打卡连续天数、提醒窗口
+node scripts/smoke-deadline.mjs  # 有截止的任务不排到截止之后
+node scripts/smoke-reminder.mjs  # 打卡连续天数、提醒窗口、错过的提醒补发
 npm.cmd run build                # 类型检查 + 构建
 ```
 
@@ -51,15 +54,18 @@ npm.cmd run build                # 类型检查 + 构建
 ```powershell
 node scripts/e2e-course-import.mjs   # 贴课表截图 → 本周课表出现、无任务时给引导、控制台无报错，截图存 deliverables/assets/test/
 node scripts/e2e-habit-time.mjs      # 习惯按 20:00 开始、列表写「每天 20:00 开始」而不是「截止」，截图同上
+node scripts/e2e-deadline-reminder.mjs  # 马上截止的事：不排到截止之后、立刻弹提醒，截图同上
 ```
 
 ## 规则与拦法
 
 | 规则 | 由什么拦住 |
 |---|---|
-| 交差前跑通测试；界面改动附截图 | `e2e-course-import.mjs` / `e2e-habit-time.mjs`（真浏览器 + 控制台报错检查） |
+| 交差前跑通测试；界面改动附截图 | `e2e-*.mjs` 三个（真浏览器 + 控制台报错检查） |
 | 录入只追加、不覆盖已有活动 | 解析/截图都只经 `dedupeActivities`，没有别的写入路径 |
 | 习惯按原文钟点开始，不默认 19:00 | `smoke-habit.mjs` |
+| 有截止的任务不排到截止之后 | `smoke-deadline.mjs` |
+| 提醒时刻错过、截止将至时要补发 | `smoke-reminder.mjs` |
 | 单个文本文件不超 20 KB | `.githooks/pre-commit` |
 
 ## 提交前
@@ -70,7 +76,7 @@ node scripts/e2e-habit-time.mjs      # 习惯按 20:00 开始、列表写「每�
 
 ## 路标
 
-- 为什么这么设计：`docs/decisions-schedule-app.md`（D1–D22）
+- 为什么这么设计：`docs/decisions-schedule-app.md`（D1–D23）
 - 怎么发布给别人用：`docs/deploy-edgeone.md`
 - 提交材料：`deliverables/`（项目文档、PPT 大纲、演示视频脚本、配图）
 - 回归脚本：`app/scripts/`
