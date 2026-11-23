@@ -1,5 +1,9 @@
 /** P1 · 抽取：把一段乱七八糟的文字变成活动数组 */
 
+/** 「只有日期、没有具体时刻」的统一规则，P1 与 V2 共用，避免改一处漏一处 */
+const DATE_ONLY_RULE =
+  '只给了日期、确定不了几点的：deadline 填当天 23:59，fixed 必须是 false，并在 note 里说明。'
+
 export function buildParseMessages(text: string, today: string) {
   const system = `你是大学生的日程助手。把用户给的文字拆成活动，只输出 JSON，不要任何解释。
 
@@ -24,7 +28,7 @@ export function buildParseMessages(text: string, today: string) {
 4. deadline 必须写成 "YYYY-MM-DD HH:mm"，用空格分隔，**不要出现 T**。只给了日期没给时刻，一律按当天 23:59。
 5. 如果原文说"周五"，而今天正好是周五，理解为下一个周五；只有原文写了"今天"才用今天。
 6. 考试、报告、作业、论文都属于 ddl；只有"每周几固定上课"才是 course。
-7. 如果只能确定日期、确定不了几点（deadline 因此填成 23:59），fixed 必须是 false——不知道几点开始，就不能当成"到点要在场"的事。
+7. ${DATE_ONLY_RULE}不知道几点开始，就不能当成"到点要在场"的事。
 8. 社团培训、讲座、班会、面试这类一次性、必须到场、且原文给了具体时刻的：type 用 ddl，fixed 为 true，durationMin 填活动本身时长。
 9. 每天重复的事（背单词、跑步）用 habit，deadline 为 null。
 
@@ -159,7 +163,7 @@ export function buildNoticeImageMessages(today: string) {
 1. 今天的日期是 ${today}，据此把"今晚""明天下午三点""下周三"换算成具体日期。
 2. 忽略闲聊、表情、"收到""好的""+1" 这类回复，以及接龙报名里的人名。
 3. 抓住通知本身的**事项**和**时间**，不要抓发送者说了什么客套话。
-4. 只给了日期、确定不了几点的，deadline 填当天 23:59，并且 fixed 必须是 false，note 里说明。
+4. ${DATE_ONLY_RULE}
 5. 班会、开会、讲座、面试这类一次性到场活动一律用 ddl（fixed 为 true），course 只留给「每周固定重复上的课」。
 6. 截图里没有与时间有关的内容，就输出 {"activities":[]}。
 

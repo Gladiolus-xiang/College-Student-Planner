@@ -1,10 +1,10 @@
+import { parseDeadline } from './time.ts'
 import type { Activity } from '../types'
 
 /** 该提醒的时刻 = 截止时间 - 提前量 */
 export function reminderAt(activity: Activity): Date | null {
-  if (!activity.deadline) return null
-  const due = new Date(activity.deadline.replace(' ', 'T'))
-  if (Number.isNaN(due.getTime())) return null
+  const due = parseDeadline(activity.deadline)
+  if (!due) return null
   return new Date(due.getTime() - Math.max(0, activity.remindBeforeMin || 0) * 60_000)
 }
 

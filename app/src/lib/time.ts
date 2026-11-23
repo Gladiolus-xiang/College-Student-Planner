@@ -2,6 +2,13 @@
 
 const pad = (n: number) => String(n).padStart(2, '0')
 
+/** "YYYY-MM-DD HH:mm" → Date。解析不了返回 null。全项目只在这里做这件事。 */
+export function parseDeadline(value: string | null | undefined): Date | null {
+  if (!value) return null
+  const date = new Date(value.replace(' ', 'T'))
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
 export function normalizeDeadline(input: unknown): string | null {
   if (typeof input !== 'string') return null
   const s = input.trim().replace('T', ' ')
@@ -23,8 +30,8 @@ export function normalizeDeadline(input: unknown): string | null {
 /** "2026-11-25 20:00" → 距离现在还有多久，用于卡片上显示“还剩 3 天” */
 export function humanizeRemaining(deadline: string | null, now = new Date()): string {
   if (!deadline) return '无明确截止'
-  const target = new Date(deadline.replace(' ', 'T'))
-  if (Number.isNaN(target.getTime())) return deadline
+  const target = parseDeadline(deadline)
+  if (!target) return deadline
 
   const diffMs = target.getTime() - now.getTime()
   if (diffMs < 0) return '已过期'

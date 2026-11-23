@@ -1,3 +1,4 @@
+import { parseDeadline } from './time.ts'
 import type { Activity, CourseSlot, PlanBlock } from '../types'
 
 /**
@@ -50,9 +51,8 @@ export function planWindowDays(tasks: Activity[], now = new Date()): number {
 
   let span = 3
   for (const task of tasks) {
-    if (!task.deadline) continue
-    const due = new Date(task.deadline.replace(' ', 'T'))
-    if (Number.isNaN(due.getTime())) continue
+    const due = parseDeadline(task.deadline)
+    if (!due) continue
     due.setHours(0, 0, 0, 0)
     const days = Math.round((due.getTime() - startOfToday.getTime()) / 86_400_000) + 1
     if (days > span) span = days
@@ -60,7 +60,7 @@ export function planWindowDays(tasks: Activity[], now = new Date()): number {
   return Math.min(7, span)
 }
 
-export function weekdayOf(date: Date): 1 | 2 | 3 | 4 | 5 | 6 | 7 {
+function weekdayOf(date: Date): 1 | 2 | 3 | 4 | 5 | 6 | 7 {
   const d = date.getDay()
   return (d === 0 ? 7 : d) as 1 | 2 | 3 | 4 | 5 | 6 | 7
 }
@@ -72,7 +72,7 @@ function busyIntervals(date: Date, courses: CourseSlot[]): Array<[number, number
 }
 
 /** 当天还能用的空闲段（已扣掉课程、固定日程、午饭晚饭） */
-export function freeSlots(
+function freeSlots(
   date: Date,
   courses: CourseSlot[],
   extraBusy: Array<[number, number]> = [],
@@ -90,8 +90,7 @@ export function freeSlots(
   return slots.filter(([s, e]) => e - s >= MIN_BLOCK)
 }
 
-const deadlineTs = (a: Activity): number =>
-  a.deadline ? new Date(a.deadline.replace(' ', 'T')).getTime() : Number.MAX_SAFE_INTEGER
+const deadlineTs = (a: Activity): number => parseDeadline(a.deadline)?.getTime() ?? Number.MAX_SAFE_INTEGER
 
 /** 排序：先按优先级，再按截止时间 */
 function orderOf(tasks: Activity[]): Activity[] {
@@ -119,9 +118,8 @@ export interface PlanOptions {
 
 /** 固定日程的占用区间：截止时间就是到场时间 */
 function fixedInterval(task: Activity): { date: string; start: number; end: number } | null {
-  if (!task.deadline) return null
-  const d = new Date(task.deadline.replace(' ', 'T'))
-  if (Number.isNaN(d.getTime())) return null
+  const d = parseDeadline(task.deadline)
+  if (!d) return null
 
   const start = d.getHours() * 60 + d.getMinutes()
   // 23:59 这类「只有日期没有时刻」的兜底值不是真的到场时间，不能当固定日程处理
