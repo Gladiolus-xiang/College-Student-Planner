@@ -102,9 +102,9 @@ def build_architecture():
 
     layers = [
         ("01", "浏览器端", "React 单页 · 用户看到的全部界面", SKY,
-         ["录入与解析", "三天计划视图", "打卡与提醒", "localStorage"]),
-        ("02", "本地 Node 中间件", "Vite 插件挂载 · 四十行代码", ACCENT,
-         ["POST /api/chat", "校验层 · 补齐归一", "从 .env 注入密钥", "写调用日志"]),
+         ["录入与解析", "3–7 天计划视图", "打卡与提醒", "localStorage"]),
+        ("02", "服务端代理", "本地 Node 壳 / 线上边缘函数 · 同一份代码", ACCENT,
+         ["POST /api/chat", "同源校验", "每日额度 · KV", "密钥只读环境变量"]),
         ("03", "DeepSeek API", "deepseek-chat / deepseek-flash · 国内直连", GREEN,
          ["P1 抽取活动", "P2 解释计划", "P3 重排顺序", "V 读截图"]),
     ]
@@ -133,7 +133,7 @@ def build_architecture():
         label = "只发消息，不带密钥" if i == 0 else "带 Authorization 头"
         text(d, (735, (y_from + y_to) / 2 - 15), label, 20, MUTED)
 
-    text(d, (230, 962), "密钥只存在于第 02 层：前端构建产物里搜不到 sk- 开头的字符串", 21, MUTED)
+    text(d, (230, 962), "密钥只在服务端：本地 .env / 线上环境变量，前端产物里搜不到 sk- 开头的字符串", 21, MUTED)
 
     path = os.path.join(OUT_DIR, "架构图.png")
     img.save(path, "PNG")
@@ -149,8 +149,8 @@ def build_loop():
     row1, row2 = 195, 615
 
     steps = [
-        (cols[0], row1, "01", "粘贴一段文字", "群通知、DDL、课表", SKY),
-        (cols[1], row1, "02", "AI 解析", "拆成活动，识别固定日程", ACCENT),
+        (cols[0], row1, "01", "粘贴文字或截图", "群通知、课表、DDL", SKY),
+        (cols[1], row1, "02", "AI 解析", "拆成活动 · 同一件事只留一份", ACCENT),
         (cols[2], row1, "03", "规则排期", "避开课程与饭点", GREEN),
         (cols[2], row2, "04", "到点提醒", "通知 + 页面卡片", GREEN),
         (cols[1], row2, "05", "打卡", "连续天数不中断", ACCENT),
