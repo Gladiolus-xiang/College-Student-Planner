@@ -27,6 +27,7 @@ npm.cmd run dev      # 必须 npm.cmd，Windows 禁 npm.ps1
 8. **线上请求体上限 1 MB**（边缘函数的硬限制）。截图在前端压到 1280px / JPEG 0.82，超了自动降档；不要把 `MAX_BODY_CHARS` 调大，那只会把 413 从函数里挪到平台层。
 9. 每日额度靠 KV，绑定变量名必须是 `QUOTA`；没绑定时代码自动跳过限流、不报错——所以「额度没生效」先查绑定，不是查代码。
 10. 去重口径只有一处：`src/lib/dedupe.ts`（标题归一 + 截止时间）。别在 `App.tsx` 里另写一遍相等比较——两处口径迟早对不上。
+11. 固定日程的 `deadline` 存的是**开始时刻**（`fixedInterval` 拿它当到场时间）。提示词里凡是「几点 + 有某事」都要判成 fixed，界面文案说「开始」不写「截止」。
 
 ## 改完跑什么
 
@@ -40,7 +41,7 @@ node scripts/smoke-reminder.mjs  # 打卡连续天数、提醒窗口
 npm.cmd run build                # 类型检查 + 构建
 ```
 
-`smoke-parse` / `smoke-reasons` / `smoke-reorder` / `smoke-vision` 需要 dev server 在跑（它们会真实调用模型）。
+`smoke-parse` / `smoke-reasons` / `smoke-reorder` / `smoke-vision` / `smoke-start-time` 需要 dev server 在跑（它们会真实调用模型）。
 
 ## 提交前
 
@@ -51,7 +52,7 @@ npm.cmd run build                # 类型检查 + 构建
 
 ## 路标
 
-- 为什么这么设计：`docs/decisions-schedule-app.md`（D1–D18）
+- 为什么这么设计：`docs/decisions-schedule-app.md`（D1–D19）
 - 怎么发布给别人用：`docs/deploy-edgeone.md`
 - 提交材料：`deliverables/`（项目文档、PPT 大纲、演示视频脚本、配图）
 - 回归脚本：`app/scripts/`

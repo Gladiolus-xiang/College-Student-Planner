@@ -30,7 +30,8 @@ export function buildParseMessages(text: string, today: string) {
 6. 考试、报告、作业、论文都属于 ddl；只有"每周几固定上课"才是 course。
 7. ${DATE_ONLY_RULE}不知道几点开始，就不能当成"到点要在场"的事。
 8. 社团培训、讲座、班会、面试这类一次性、必须到场、且原文给了具体时刻的：type 用 ddl，fixed 为 true，durationMin 填活动本身时长。
-9. 每天重复的事（背单词、跑步）用 habit，deadline 为 null。
+9. 「几点 + 有某事」（今天15:53有线代复习、明天九点开会、周三下午两点答疑）里的时刻是**开始时间，不是截止时间**：fixed 为 true，deadline 写这个开始时刻，durationMin 按这类活动常见的 60–90 分钟估，并在 note 里说明这是开始时间。
+10. 每天重复的事（背单词、跑步）用 habit，deadline 为 null。
 
 输出格式：{"activities":[{"title":"...","type":"ddl","deadline":"2026-11-26 20:00","durationMin":180,"priority":1,"remindBeforeMin":120,"fixed":false,"note":""}]}`
 
@@ -49,12 +50,18 @@ export interface PlanBlockInput {
   start: string
   end: string
   deadline: string | null
+  /** 固定日程：报到场时间，不写「截止」 */
+  fixed?: boolean
 }
 
 export function buildReasonMessages(blocks: PlanBlockInput[], today: string) {
   const lines = blocks
     .map((b) => {
-      const due = b.deadline ? `截止 ${b.deadline}` : '无截止时间'
+      const due = b.fixed
+        ? `固定日程，${b.start} 到点在场`
+        : b.deadline
+          ? `截止 ${b.deadline}`
+          : '无截止时间'
       return `[${b.activityId}] ${b.date} ${b.start}-${b.end} 《${b.title}》，${due}`
     })
     .join('\n')
@@ -165,7 +172,8 @@ export function buildNoticeImageMessages(today: string) {
 3. 抓住通知本身的**事项**和**时间**，不要抓发送者说了什么客套话。
 4. ${DATE_ONLY_RULE}
 5. 班会、开会、讲座、面试这类一次性到场活动一律用 ddl（fixed 为 true），course 只留给「每周固定重复上的课」。
-6. 截图里没有与时间有关的内容，就输出 {"activities":[]}。
+6. 截图里写「七点半开会」「下午有实验」这类「时刻 + 有某事」的，时刻是**开始时间**，不是截止时间：fixed 为 true，deadline 写这个时刻。
+7. 截图里没有与时间有关的内容，就输出 {"activities":[]}。
 
 只输出 JSON，不要任何解释。`
 

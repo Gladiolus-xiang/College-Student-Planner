@@ -184,6 +184,7 @@ function App() {
           start: block.start,
           end: block.end,
           deadline: activity?.deadline ?? null,
+          fixed: activity?.fixed === true,
         }
       })
 
@@ -539,7 +540,13 @@ function App() {
                         </span>
                       </div>
                       <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
-                        <span>{item.deadline ? `截止 ${item.deadline} · ${humanizeRemaining(item.deadline)}` : '无明确截止'}</span>
+                        <span>
+                          {item.deadline
+                            ? item.fixed
+                              ? `${item.deadline.slice(11)} 开始 · 固定日程`
+                              : `截止 ${item.deadline} · ${humanizeRemaining(item.deadline)}`
+                            : '无明确截止'}
+                        </span>
                         <span>预计 {item.durationMin} 分钟</span>
                         <span>优先级 {item.priority}</span>
                       </div>

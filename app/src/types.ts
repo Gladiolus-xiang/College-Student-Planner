@@ -4,7 +4,7 @@ export interface Activity {
   id: string
   title: string
   type: ActivityType
-  /** YYYY-MM-DD HH:mm，没有截止时间就是 null */
+  /** YYYY-MM-DD HH:mm。固定日程里这个时刻是到场/开始时间；没有时间就是 null */
   deadline: string | null
   durationMin: number
   priority: 1 | 2 | 3
