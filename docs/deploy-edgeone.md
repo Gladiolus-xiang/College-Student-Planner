@@ -103,6 +103,7 @@ git push -u origin main
 | 403「这个地址只给本站页面用」 | 页面和接口不同源 | 用平台给的域名访问，不要直接调接口 |
 | 401 + 一个「Tencent Edgeone」页面 | 打开的是**预览域名**，链接里的 `eo_token` 过期（3 小时） | 回控制台拿最新的预览链接；长期用请绑自定义域名 |
 | 502「调用模型失败 / AbortSignal.timeout is not a function」 | 边缘运行时没有 `AbortSignal.timeout`（2026-11-23 已改成 `AbortController`） | `git push` 后重新部署即可 |
+| 502「调用模型失败: net_exception_timeout」 | 边缘函数的 `fetch` **默认读响应只等 15 秒**，模型吐 1000+ token 就撞上（2026-11-24 已在 `chat.js` 显式调到 45s） | `git push` 后重新部署即可；本地看 `app/scripts/smoke-quota.mjs` 里「显式调大读超时」那条 |
 | 页面弹出「crypto.randomUUID is not a function」 | 用 **http://** 打开，浏览器在非安全上下文里没有这个 API（2026-11-24 已加兜底） | `git push` 后重新部署；能用 https 就优先用 https |
 | 手机上没有系统通知 | iPhone 的 Safari 不支持网页通知 | 页面右下角 Toast 仍然有；演示时说清这一点 |
 

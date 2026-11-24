@@ -36,6 +36,7 @@ npm.cmd run dev      # 必须 npm.cmd，Windows 禁 npm.ps1
 16. **边缘运行时能力有限**：线上实测没有 `AbortSignal.timeout`（报 `is not a function`，表现为 502「调用模型失败」）。超时一律 `AbortController` + `setTimeout` + `clearTimeout`；新增任何 Web API 前先想「EdgeOne 的运行时有没有」。
 17. **课表识别的星期看「文字落在哪一列」**，不是色块边框——色块跨列时模型会把课复制到相邻两天（真实截图踩过：周五的高数被记成周六）。提示词 A 节第 4 条已写明；识别错的课在「本周课表」里点 × 删掉即可，`removeCourse` 会写回 localStorage。
 18. **别直接用只在安全上下文里有的 API**：`crypto.randomUUID()` 在 http:// 打开时是 undefined（部署后用 http 访问就崩，报 `crypto.randomUUID is not a function`）。前端要 id 一律走 `src/lib/id.ts` 的 `uid()`；`Notification` 之类同理，用前先判断。
+19. **线上「模型超时」先怀疑平台的默认值**：EdgeOne 边缘函数的 `fetch` 默认「建连 3s / 读响应 15s / 发请求 300s」，模型吐 1000+ token 必然超（表现为「调用模型失败: net_exception_timeout」，本地同样代码 1.6–3.3s 就回）。调模型时必须带 `eo: { timeoutSetting }`（`chat.js` 的 `EDGE_TIMEOUT`），自己的 `AbortController` 闹钟要比它短（40s < 45s），否则用户看到的是英文黑话而不是「请重试」。Node 的 fetch 忽略 `eo`，本地不用分支。
 
 ## 改完跑什么
 
@@ -71,6 +72,7 @@ node scripts/e2e-http-fallback.mjs   # 抹掉 crypto.randomUUID（模拟 http �
 | 有截止的任务不排到截止之后 | `smoke-deadline.mjs` |
 | 提醒时刻错过、截止将至时要补发 | `smoke-reminder.mjs` |
 | 代理超时不能用 `AbortSignal.timeout` | `smoke-quota.mjs`（模拟运行时缺这个 API） |
+| 调模型必须显式调大平台的读超时，且黑话不外泄 | `smoke-quota.mjs`（`eo.timeoutSetting` 被删、或 502 直接透 `net_exception_timeout` 都会红） |
 | 课表识别错了要能删、删完不回来 | `e2e-course-import.mjs`（删一行 + 刷新后仍是 9 行） |
 | 非安全上下文（http）里不能用 `crypto.randomUUID` | `e2e-http-fallback.mjs`（先抹掉这个 API 再跑解析） |
 | 单个文本文件不超 20 KB | `.githooks/pre-commit` |
@@ -83,7 +85,7 @@ node scripts/e2e-http-fallback.mjs   # 抹掉 crypto.randomUUID（模拟 http �
 
 ## 路标
 
-- 为什么这么设计：`docs/decisions-schedule-app.md`（D1–D23）
+- 为什么这么设计：`docs/decisions-schedule-app.md`（D1–D24）
 - 怎么发布给别人用：`docs/deploy-edgeone.md`
 - 提交材料：`deliverables/`（项目文档、PPT 大纲、演示视频脚本、配图）——**只留本地，已进 `.gitignore`，不要提交进仓库**
 - 回归脚本：`app/scripts/`

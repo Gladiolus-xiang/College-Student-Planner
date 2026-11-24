@@ -128,6 +128,12 @@
 - **取舍**：过期任务不再排进计划（只在「没排上」里列出来 + 说明），宁可少排一块，也不排一块误导的。补发只补「截止还有 30 分钟以内」的，其它错过的不补——避免一打开页面炸出一堆旧提醒。
 - **验证**：`smoke-deadline.mjs` 6 项（1 分钟后截止不排块、截止前结束、跨天最后一块不晚于截止、过期不排、无截止照排）；`smoke-reminder.mjs` 15 项（含「提醒时刻已过、截止将至 → 补发」「截止已过不补」「补发过不再补」「标题说还有 1 分钟」）；`e2e-deadline-reminder.mjs` 4 项真浏览器。
 
+### D24 · 线上模型超时要自己管：平台 fetch 默认只等 15 秒
+- **结论**：边缘函数调模型时必须显式传 `eo.timeoutSetting`（`app/edge-functions/api/chat.js` 的 `EDGE_TIMEOUT`：建连 10s / 读响应 45s / 发请求 60s）。自己的 `AbortController` 闹钟留在比它短的位置（40s），保证先响的是我们那句「模型响应超时，请重试」。平台抛 `net_exception_timeout` / `net_exception_connect_timeout` 时翻成人话并标 `retryable`，不把英文透给用户；识别失败的截图留在内存里，报错横幅上直接给「重试这张图」。
+- **理由**：线上报「调用模型失败: net_exception_timeout」。排查后不是模型慢，是平台 fetch 的默认值——「建连 3s / 读响应 15s / 发请求 300s」，模型一次吐 1000+ token（本地实测 1.6–3.3s，高峰期远超 15s）就必然撞上；而函数自己的超时设的是 55s，永远没机会响，用户看到的是黑话，也不知道该不该再试一次。
+- **取舍**：读超时没有直接顶到平台上限 300s，而是 45s——手机上一声不响等三分钟比报错更糟；超过 45s 就认栽，让用户点重试。识别失败后的截图只放内存（`lastImage` ref），刷新页面就没了，不占 localStorage。
+- **验证**：`smoke-quota.mjs` 14 项（新增「上游 fetch 显式调大读超时」，删掉 `eo.timeoutSetting` 就红；新增「平台读超时 → 人话 + 标记可重试」，把黑话直接透出去也红）。
+
 ## 待定
 
 - 自有域名与备案：比赛后如果要长期留着，再买域名 + 备案；现在不碰（平台二级域名够用）
@@ -151,3 +157,4 @@
 - 2026-11-23 深夜 首次线上部署验收：页面、同源校验、405 全对；同源调模型 502，原因是 EdgeOne 运行时没有 `AbortSignal.timeout`——改成 `AbortController` + `setTimeout`，`smoke-quota.mjs` 加一条「运行时缺这个 API 也能调通」。
 - 2026-11-23 深夜 课表识图多出一节课（周五的高数被记成周四/周六各一节）：视觉提示词加「星期由文字落在哪一列决定，色块跨列也只算一列」；「本周课表」每条课都能点 × 删掉，删完写回 localStorage。
 - 2026-11-24 部署后用 http 打开报 `crypto.randomUUID is not a function`（非安全上下文没有这个 API）：新增 `src/lib/id.ts` 的 `uid()` 兜底，三处调用全改走它，补 `e2e-http-fallback.mjs`。
+- 2026-11-24 手机线上一解析就报「调用模型失败: net_exception_timeout」：不是模型慢，是 EdgeOne fetch 默认只等 15 秒读响应。显式传 `eo.timeoutSetting`（读 45s），自己的闹钟留 40s，平台黑话翻成人话，识图失败可原地重试，追加 D24 + `smoke-quota.mjs` 两项。
