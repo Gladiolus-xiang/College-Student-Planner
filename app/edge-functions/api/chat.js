@@ -13,7 +13,18 @@
 
 const DEFAULT_BASE = 'https://api.deepseek.com'
 const DEFAULT_MODEL = 'deepseek-chat'
-const UPSTREAM_TIMEOUT_MS = 55_000
+/**
+ * 自己的闹钟要比平台的短：平台读超时先响的话，用户看到的是 `net_exception_timeout`
+ * 这种黑话。这里 40s，平台给 45s——谁的闹钟先响，谁负责把话说清楚。
+ */
+const UPSTREAM_TIMEOUT_MS = 40_000
+/**
+ * EdgeOne 边缘函数的 fetch 默认「建连 3s / 读响应 15s / 发请求 300s」，
+ * 读超了直接抛 `net_exception_timeout`——模型出 1000+ token 时 15 秒根本不够，
+ * 线上表现为「调用模型失败: net_exception_timeout」。必须显式调大（上限 300s）。
+ * Node 的 fetch 会忽略这个 eo 字段，本地和线上跑同一份代码不会出岔子。
+ */
+const EDGE_TIMEOUT = { connectTimeout: 10_000, readTimeout: 45_000, writeTimeout: 60_000 }
 /** 边缘函数请求体上限 1 MB，前端已把截图压到 1280px，留出 JSON 开销的余量 */
 const MAX_BODY_CHARS = 900 * 1024
 const DEFAULT_DAILY_LIMIT = 400
@@ -197,6 +208,7 @@ export async function handleChat(request, ctx = {}) {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       body: JSON.stringify(payload),
       signal: controller.signal,
+      eo: { timeoutSetting: EDGE_TIMEOUT },
     })
     const text = await upstream.text()
     if (!upstream.ok) {
@@ -217,12 +229,20 @@ export async function handleChat(request, ctx = {}) {
     return json({ content, model, ms, usage: data.usage }, 200, { 'X-Quota-Used': String(quota.used) })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    const timedOut = message.includes('timed out') || message.includes('abort')
+    // 平台自己的网络异常也要认：net_exception_timeout = 读响应超时（默认只有 15 秒），
+    // net_exception_connect_timeout = 建连超时。不认的话用户看到的是一串黑话。
+    const netTimeout = message.includes('net_exception')
+    const unreachable = netTimeout && message.includes('connect')
+    const timedOut = !unreachable && (netTimeout || message.includes('timed out') || message.includes('abort'))
     log?.({ ok: false, model, ms: Date.now() - started, error: message })
-    return json(
-      { error: timedOut ? '模型响应超时，请重试（识别截图会比纯文字慢）' : '调用模型失败', detail: message },
-      502,
-    )
+    const error = unreachable
+      ? '连不上模型服务，过一会儿再试'
+      : timedOut
+        ? '模型响应超时，请重试（识别截图会比纯文字慢）'
+        : '调用模型失败'
+    // 超时是「再点一次就好」的事，把黑话收进日志，别糊到用户脸上
+    const detail = unreachable || timedOut ? undefined : message
+    return json({ error, detail, retryable: unreachable || timedOut }, 502)
   } finally {
     clearTimeout(timer)
   }

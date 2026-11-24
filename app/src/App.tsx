@@ -54,6 +54,8 @@ function App() {
   const [summary, setSummary] = useState('')
   const [explainState, setExplainState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle')
   const requestId = useRef(0)
+  /** 上一张识别失败的截图 —— 失败后手机上不用再翻相册找一遍，原地点「重试」即可 */
+  const lastImage = useRef<File | null>(null)
 
   const [doneBlocks, setDoneBlocks] = useState<Set<string>>(() => new Set())
   const [replanOrder, setReplanOrder] = useState<string[] | null>(null)
@@ -281,6 +283,7 @@ function App() {
     }
     if (imageBusy) return
 
+    lastImage.current = file
     setImageBusy(true)
     setError('')
     try {
@@ -343,6 +346,12 @@ function App() {
     input.click()
   }
 
+  /** 识别失败后重试同一张图（模型超时是最常见的失败，重试一次一般就过了） */
+  const retryImage = () => {
+    const file = lastImage.current
+    if (file) void handleImage(file)
+  }
+
   async function handleParse() {
     if (!text.trim() || loading) return
     setLoading(true)
@@ -396,6 +405,7 @@ function App() {
             imageBusy={imageBusy}
             onPickImage={pickImage}
             onImageFile={(file) => void handleImage(file)}
+            onRetryImage={lastImage.current && error ? retryImage : undefined}
             error={error}
             courseCount={courses.length}
           />

@@ -8,6 +8,8 @@ interface ComposerProps {
   imageBusy: boolean
   onPickImage: () => void
   onImageFile: (file: File) => void
+  /** 识别失败后重试上一张图；没图或没报错时不传，按钮就不出现 */
+  onRetryImage?: () => void
   error: string
   courseCount: number
 }
@@ -21,6 +23,7 @@ export function Composer({
   imageBusy,
   onPickImage,
   onImageFile,
+  onRetryImage,
   error,
   courseCount,
 }: ComposerProps) {
@@ -87,7 +90,21 @@ export function Composer({
         <span className="text-[11px] text-slate-400">课表、群通知都行；电脑上也能直接 Ctrl+V</span>
         <span className="ml-auto text-[11px] text-slate-300">当前课表 {courseCount} 门</span>
       </div>
-      {error && <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{error}</p>}
+      {error && (
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-rose-50 px-3 py-2">
+          <p className="text-xs text-rose-700">{error}</p>
+          {onRetryImage && (
+            <button
+              type="button"
+              onClick={onRetryImage}
+              disabled={imageBusy}
+              className="shrink-0 rounded-md border border-rose-200 bg-white px-2.5 py-1 text-xs font-medium text-rose-700 transition hover:border-rose-400 disabled:opacity-50"
+            >
+              重试这张图
+            </button>
+          )}
+        </div>
+      )}
     </section>
   )
 }

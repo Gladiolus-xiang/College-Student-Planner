@@ -152,6 +152,40 @@ const messages = [{ role: 'user', content: 'hi' }]
   }
 }
 
+// 11. 线上踩过：EdgeOne 的 fetch 默认读响应只等 15 秒，模型出 1000+ token 就抛 net_exception_timeout
+//     → 必须显式调大，且要能被这段测试钉住（删了 eo.timeoutSetting 这项就红）
+{
+  let captured = null
+  globalThis.fetch = async (_url, init) => {
+    captured = init
+    return new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+  const res = await handleChat(post({ messages }), { env: KEY, checkOrigin: true })
+  const readTimeout = captured?.eo?.timeoutSetting?.readTimeout
+  check(
+    '上游 fetch 显式调大读超时（平台默认只有 15s）',
+    res.status === 200 && readTimeout > 15_000,
+    `readTimeout=${readTimeout}`,
+  )
+}
+
+// 12. 平台那边先超时（net_exception_timeout）时，用户该看到人话，而不是这串英文
+{
+  globalThis.fetch = async () => {
+    throw new Error('net_exception_timeout')
+  }
+  const res = await handleChat(post({ messages }), { env: KEY, checkOrigin: true })
+  const data = await res.json()
+  check(
+    '平台读超时 → 人话 + 标记可重试',
+    res.status === 502 && String(data.error).includes('超时') && data.retryable === true && !data.detail,
+    `${res.status} ${data.error}`,
+  )
+}
+
 globalThis.fetch = realFetch
 const failed = results.filter((r) => !r.ok)
 console.log(failed.length ? `\n${failed.length} 项失败` : `\n全部通过（${results.length} 项）`)
