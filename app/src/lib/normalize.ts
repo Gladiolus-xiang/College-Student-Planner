@@ -4,6 +4,7 @@
  */
 import type { Activity, ActivityType, CourseSlot } from '../types'
 import { normalizeDeadline } from './time.ts'
+import { uid } from './id.ts'
 
 export interface RawActivity {
   title?: string
@@ -47,7 +48,7 @@ export function normalizeActivities(raw: RawActivity[]): Activity[] {
       const habitClock =
         type === 'habit' ? normalizeClock(item.preferStart) ?? normalizeClock(deadline?.slice(11)) : undefined
       return {
-        id: crypto.randomUUID(),
+        id: uid(),
         title: String(item.title).trim(),
         type,
         deadline: type === 'habit' ? null : deadline,
@@ -74,7 +75,7 @@ export function normalizeCourses(raw: RawCourse[]): CourseSlot[] {
       const start = String(item.start).trim()
       const end = String(item.end).trim()
       return {
-        id: crypto.randomUUID(),
+        id: uid(),
         name: String(item.name).trim().slice(0, 20),
         weekday,
         start: HHMM.test(start) ? start.padStart(5, '0') : '08:00',

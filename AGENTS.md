@@ -35,6 +35,7 @@ npm.cmd run dev      # 必须 npm.cmd，Windows 禁 npm.ps1
 15. **别用 PowerShell 的 `Set-Content` / `-replace` 改源码**：会把中文写成乱码（已经毁过一次 `schedule.ts`）。改文件只用编辑工具，或者用 Python 显式 `encoding='utf-8'`。
 16. **边缘运行时能力有限**：线上实测没有 `AbortSignal.timeout`（报 `is not a function`，表现为 502「调用模型失败」）。超时一律 `AbortController` + `setTimeout` + `clearTimeout`；新增任何 Web API 前先想「EdgeOne 的运行时有没有」。
 17. **课表识别的星期看「文字落在哪一列」**，不是色块边框——色块跨列时模型会把课复制到相邻两天（真实截图踩过：周五的高数被记成周六）。提示词 A 节第 4 条已写明；识别错的课在「本周课表」里点 × 删掉即可，`removeCourse` 会写回 localStorage。
+18. **别直接用只在安全上下文里有的 API**：`crypto.randomUUID()` 在 http:// 打开时是 undefined（部署后用 http 访问就崩，报 `crypto.randomUUID is not a function`）。前端要 id 一律走 `src/lib/id.ts` 的 `uid()`；`Notification` 之类同理，用前先判断。
 
 ## 改完跑什么
 
@@ -57,19 +58,21 @@ npm.cmd run build                # 类型检查 + 构建
 node scripts/e2e-course-import.mjs   # 贴课表截图 → 本周课表出现、无任务时给引导、控制台无报错，截图存 deliverables/assets/test/
 node scripts/e2e-habit-time.mjs      # 习惯按 20:00 开始、列表写「每天 20:00 开始」而不是「截止」，截图同上
 node scripts/e2e-deadline-reminder.mjs  # 马上截止的事：不排到截止之后、立刻弹提醒，截图同上
+node scripts/e2e-http-fallback.mjs   # 抹掉 crypto.randomUUID（模拟 http 打开）后，解析和排期照常
 ```
 
 ## 规则与拦法
 
 | 规则 | 由什么拦住 |
 |---|---|
-| 交差前跑通测试；界面改动附截图 | `e2e-*.mjs` 三个（真浏览器 + 控制台报错检查） |
+| 交差前跑通测试；界面改动附截图 | `e2e-*.mjs` 四个（真浏览器 + 控制台报错检查） |
 | 录入只追加、不覆盖已有活动 | 解析/截图都只经 `dedupeActivities`，没有别的写入路径 |
 | 习惯按原文钟点开始，不默认 19:00 | `smoke-habit.mjs` |
 | 有截止的任务不排到截止之后 | `smoke-deadline.mjs` |
 | 提醒时刻错过、截止将至时要补发 | `smoke-reminder.mjs` |
 | 代理超时不能用 `AbortSignal.timeout` | `smoke-quota.mjs`（模拟运行时缺这个 API） |
 | 课表识别错了要能删、删完不回来 | `e2e-course-import.mjs`（删一行 + 刷新后仍是 9 行） |
+| 非安全上下文（http）里不能用 `crypto.randomUUID` | `e2e-http-fallback.mjs`（先抹掉这个 API 再跑解析） |
 | 单个文本文件不超 20 KB | `.githooks/pre-commit` |
 
 ## 提交前

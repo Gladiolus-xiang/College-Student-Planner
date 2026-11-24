@@ -150,3 +150,4 @@
 - 2026-11-23 晚 追加 D23；排期不许跨过截止、错过的提醒立刻补发，补 `smoke-deadline.mjs` 与 `e2e-deadline-reminder.mjs`。
 - 2026-11-23 深夜 首次线上部署验收：页面、同源校验、405 全对；同源调模型 502，原因是 EdgeOne 运行时没有 `AbortSignal.timeout`——改成 `AbortController` + `setTimeout`，`smoke-quota.mjs` 加一条「运行时缺这个 API 也能调通」。
 - 2026-11-23 深夜 课表识图多出一节课（周五的高数被记成周四/周六各一节）：视觉提示词加「星期由文字落在哪一列决定，色块跨列也只算一列」；「本周课表」每条课都能点 × 删掉，删完写回 localStorage。
+- 2026-11-24 部署后用 http 打开报 `crypto.randomUUID is not a function`（非安全上下文没有这个 API）：新增 `src/lib/id.ts` 的 `uid()` 兜底，三处调用全改走它，补 `e2e-http-fallback.mjs`。

@@ -9,6 +9,7 @@ import { ensureNotificationPermission, findDue, reminderKey, reminderTitle, syst
 import { loadCourses, loadItems, saveCourses, saveItems } from './lib/store'
 import { VISION_MODEL, fileToDataUrl, isImageFile } from './lib/vision'
 import { normalizeActivities, normalizeCourses, type RawActivity, type RawCourse } from './lib/normalize'
+import { uid } from './lib/id'
 import { SAMPLE_COURSES } from './data/courses'
 import { Composer } from './components/Composer'
 import { CourseBoard } from './components/CourseBoard'
@@ -138,7 +139,7 @@ function App() {
   const todayStr = dayKey(new Date())
 
   const addToast = useCallback((title: string, body: string) => {
-    const id = crypto.randomUUID()
+    const id = uid()
     setToasts((prev) => [...prev, { id, title, body }])
     window.setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 8000)
   }, [])
